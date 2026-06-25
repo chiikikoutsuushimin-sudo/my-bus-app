@@ -78,7 +78,6 @@ if "bookings" not in st.session_state:
 if "temp_booking" not in st.session_state:
     st.session_state.temp_booking = {}
 
-# 【変更】タイトルを「庄原市交通交流施設オンライン予約」に変更
 st.title("庄原市交通交流施設オンライン予約")
 
 
@@ -96,7 +95,7 @@ if st.session_state.page == "input_datetime":
 
     selected_date = st.date_input("日付を選択してください")
 
-    # --- 【新機能：案３】選択された部屋・日付の「1時間ごとの◯×時間割表」を表示 ---
+    # --- 選択された部屋・日付の「1時間ごとの◯×時間割表」を表示 ---
     st.write(f"### 🕒 {selected_date.strftime('%Y年%m月%d日')} の空き時間割")
     
     is_closed_date = (selected_date.month == 12 and selected_date.day >= 29) or \
@@ -114,7 +113,6 @@ if st.session_state.page == "input_datetime":
             status = "⚪ 休館日"
             bg_color = "#e0e0e0"
         else:
-            # 1時間ごとの重複チェック
             booked = False
             for b in st.session_state.bookings:
                 if b['date'] == selected_date and b['room'] == room:
@@ -188,80 +186,80 @@ if st.session_state.page == "input_datetime":
             st.rerun()
 
     st.write("---")
-    # 【変更】カレンダーのタイトルを「現在の予約」に変更
-    st.subheader("🗓️ 現在の予約")
-    # 【追加】「現在の予約」の下に注意事項を表示
-    st.write("※緑表示の場合は予約可能、赤表示の場合は予約不可となります")
     
-    # 共通の計算：選択された日付から、今年度の「3月31日」が何年になるかを自動計算
-    start_grid_date = selected_date.replace(day=1)
-    if selected_date.month <= 3:
-        end_year = selected_date.year
-    else:
-        end_year = selected_date.year + 1
-    target_end_date = datetime.date(end_year, 3, 31)
-    
-    # カレンダーのオプション共通設定
-    calendar_options = {
-        "editable": False,
-        "selectable": False,
-        "locale": "ja",
-        "headerToolbar": {
-            "left": "prev,next today",
-            "center": "title",
-            "right": "dayGridMonth"
-        },
-        "initialView": "dayGridMonth",
-    }
+    # --- 【大改造：パターン２】月間カレンダーを折りたたみ式（隠しボタン）に閉じ込める ---
+    with st.expander("🗓️ 全体の予約状況（月間カレンダー）を見る"):
+        st.write("※緑表示の場合は予約可能、赤表示の場合は予約不可となります")
+        
+        # 共通の計算：選択された日付から、今年度の「3月31日」が何年になるかを自動計算
+        start_grid_date = selected_date.replace(day=1)
+        if selected_date.month <= 3:
+            end_year = selected_date.year
+        else:
+            end_year = selected_date.year + 1
+        target_end_date = datetime.date(end_year, 3, 31)
+        
+        # カレンダーのオプション共通設定
+        calendar_options = {
+            "editable": False,
+            "selectable": False,
+            "locale": "ja",
+            "headerToolbar": {
+                "left": "prev,next today",
+                "center": "title",
+                "right": "dayGridMonth"
+            },
+            "initialView": "dayGridMonth",
+        }
 
-    # --- 【新機能：案２】部屋ごとにタブに分けてカレンダーを表示 ---
-    tab1, tab2 = st.tabs(["地域交流室１（会議室）の状況", "地域交流室２（多目的スペース）の状況"])
-    
-    # --- タブ1: 地域交流室1 ---
-    with tab1:
-        calendar_events_room1 = []
-        loop_date = start_grid_date
-        while loop_date <= target_end_date:
-            is_closed = (loop_date.month == 12 and loop_date.day >= 29) or \
-                        (loop_date.month == 1 and loop_date.day <= 3)
-            if is_closed:
-                calendar_events_room1.append({"title": "⚪ 休館", "start": loop_date.strftime('%Y-%m-%d'), "allDay": True, "color": "#e0e0e0"})
-            else:
-                has_booking = False
-                for b in st.session_state.bookings:
-                    if b['date'] == loop_date and b['room'] == "地域交流室１（会議室）":
-                        has_booking = True
-                        break
-                if has_booking:
-                    calendar_events_room1.append({"title": "🔴 予約不可", "start": loop_date.strftime('%Y-%m-%d'), "allDay": True, "color": "#ff4b4b"})
+        # 部屋ごとにタブに分けてカレンダーを表示
+        tab1, tab2 = st.tabs(["地域交流室１（会議室）の状況", "地域交流室２（多目的スペース）の状況"])
+        
+        # --- タブ1: 地域交流室1 ---
+        with tab1:
+            calendar_events_room1 = []
+            loop_date = start_grid_date
+            while loop_date <= target_end_date:
+                is_closed = (loop_date.month == 12 and loop_date.day >= 29) or \
+                            (loop_date.month == 1 and loop_date.day <= 3)
+                if is_closed:
+                    calendar_events_room1.append({"title": "⚪ 休館", "start": loop_date.strftime('%Y-%m-%d'), "allDay": True, "color": "#e0e0e0"})
                 else:
-                    calendar_events_room1.append({"title": "🟢 予約可能", "start": loop_date.strftime('%Y-%m-%d'), "allDay": True, "color": "#2cd15a"})
-            loop_date += datetime.timedelta(days=1)
-            
-        calendar(events=calendar_events_room1, options=calendar_options, key="calendar_room1")
+                    has_booking = False
+                    for b in st.session_state.bookings:
+                        if b['date'] == loop_date and b['room'] == "地域交流室１（会議室）":
+                            has_booking = True
+                            break
+                    if has_booking:
+                        calendar_events_room1.append({"title": "🔴 予約不可", "start": loop_date.strftime('%Y-%m-%d'), "allDay": True, "color": "#ff4b4b"})
+                    else:
+                        calendar_events_room1.append({"title": "🟢 予約可能", "start": loop_date.strftime('%Y-%m-%d'), "allDay": True, "color": "#2cd15a"})
+                loop_date += datetime.timedelta(days=1)
+                
+            calendar(events=calendar_events_room1, options=calendar_options, key="calendar_room1")
 
-    # --- タブ2: 地域交流室2 ---
-    with tab2:
-        calendar_events_room2 = []
-        loop_date = start_grid_date
-        while loop_date <= target_end_date:
-            is_closed = (loop_date.month == 12 and loop_date.day >= 29) or \
-                        (loop_date.month == 1 and loop_date.day <= 3)
-            if is_closed:
-                calendar_events_room2.append({"title": "⚪ 休館", "start": loop_date.strftime('%Y-%m-%d'), "allDay": True, "color": "#e0e0e0"})
-            else:
-                has_booking = False
-                for b in st.session_state.bookings:
-                    if b['date'] == loop_date and b['room'] == "地域交流室２（多目的スペース）":
-                        has_booking = True
-                        break
-                if has_booking:
-                    calendar_events_room2.append({"title": "🔴 予約不可", "start": loop_date.strftime('%Y-%m-%d'), "allDay": True, "color": "#ff4b4b"})
+        # --- タブ2: 地域交流室2 ---
+        with tab2:
+            calendar_events_room2 = []
+            loop_date = start_grid_date
+            while loop_date <= target_end_date:
+                is_closed = (loop_date.month == 12 and loop_date.day >= 29) or \
+                            (loop_date.month == 1 and loop_date.day <= 3)
+                if is_closed:
+                    calendar_events_room2.append({"title": "⚪ 休館", "start": loop_date.strftime('%Y-%m-%d'), "allDay": True, "color": "#e0e0e0"})
                 else:
-                    calendar_events_room2.append({"title": "🟢 予約可能", "start": loop_date.strftime('%Y-%m-%d'), "allDay": True, "color": "#2cd15a"})
-            loop_date += datetime.timedelta(days=1)
-            
-        calendar(events=calendar_events_room2, options=calendar_options, key="calendar_room2")
+                    has_booking = False
+                    for b in st.session_state.bookings:
+                        if b['date'] == loop_date and b['room'] == "地域交流室２（多目的スペース）":
+                            has_booking = True
+                            break
+                    if has_booking:
+                        calendar_events_room2.append({"title": "🔴 予約不可", "start": loop_date.strftime('%Y-%m-%d'), "allDay": True, "color": "#ff4b4b"})
+                    else:
+                        calendar_events_room2.append({"title": "🟢 予約可能", "start": loop_date.strftime('%Y-%m-%d'), "allDay": True, "color": "#2cd15a"})
+                loop_date += datetime.timedelta(days=1)
+                
+            calendar(events=calendar_events_room2, options=calendar_options, key="calendar_room2")
 
 
 # ==========================================
