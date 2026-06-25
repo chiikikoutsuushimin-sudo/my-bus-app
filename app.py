@@ -1,7 +1,7 @@
 import streamlit as st
 import datetime
 import base64
-from streamlit_calendar import calendar  # 新しいカレンダー部品を読み込む
+from streamlit_calendar import calendar
 
 # --- 背景に動画を設定する関数 ---
 def set_bg_video(video_file):
@@ -40,7 +40,6 @@ def set_bg_video(video_file):
         color: black !important;
         text-shadow: none !important;
     }}
-    /* カレンダー内の文字影を消して見やすくする設定 */
     .fc * {{
         text-shadow: none !important;
         color: black !important;
@@ -66,15 +65,17 @@ if "bookings" not in st.session_state:
 if "temp_booking" not in st.session_state:
     st.session_state.temp_booking = {}
 
-st.title("施設予約システム")
+# 【変更】タイトルを「庄原市交通交流施設」に変更
+st.title("庄原市交通交流施設")
 
 
 # ==========================================
-# 画面1：ステップ1（日時と部屋の選択）
+# 画面1：申請日時と使用場所選択
 # ==========================================
 if st.session_state.page == "input_datetime":
     st.write("利用可能時間：9:00〜21:00（※12月29日〜1月3日は年末年始のため終日貸出不可）")
-    st.subheader("ステップ1: 日時と部屋の選択")
+    # 【変更】ステップ1の名称を変更
+    st.subheader("申請日時と使用場所選択")
 
     room = st.selectbox("部屋を選択してください", [
         "地域交流室１（会議室）", 
@@ -139,23 +140,59 @@ if st.session_state.page == "input_datetime":
             st.rerun()
 
     st.write("---")
-    st.subheader("🗓️ 現在の予約状況（カレンダー）")
+    # 【変更】カレンダーのタイトルを変更
+    st.subheader("🗓️ 現在の予約カレンダー")
     
-    # --- カレンダー表示用のデータ準備 ---
+    # --- 【新機能】毎日・各部屋の「空きあり/空き無し」を自動計算してカレンダーに敷き詰める ---
     calendar_events = []
-    for b in st.session_state.bookings:
-        # 部屋ごとにカレンダーの色を変える（見やすさのため）
-        event_color = "#3788d8" if b['room'] == "地域交流室１（会議室）" else "#2cd15a"
-        
-        # カレンダーに登録する形にデータを変換
-        calendar_events.append({
-            "title": f"{b['room']} ({b['name']}様)",
-            "start": f"{b['date'].strftime('%Y-%m-%d')}T{b['start_time'].strftime('%H:%M:%S')}",
-            "end": f"{b['date'].strftime('%Y-%m-%d')}T{b['end_time'].strftime('%H:%M:%S')}",
-            "color": event_color
-        })
     
-    # カレンダーの見た目の設定（日本語化、月・週切り替えボタンなど）
+    # 選択された日付の月の1日から、約60日分（翌月末まで）の空き状況を自動作成
+    start_grid_date = selected_date.replace(day=1)
+    rooms_list = ["地域交流室１（会議室）", "地域交流室２（多目的スペース）"]
+    
+    for day_offset in range(60):
+        loop_date = start_grid_date + datetime.timedelta(days=day_offset)
+        
+        # 年末年始（12/29〜1/3）の休館判定
+        is_closed = (loop_date.month == 12 and loop_date.day >= 29) or \
+                    (loop_date.month == 1 and loop_date.day <= 3)
+                    
+        for r in rooms_list:
+            display_room_name = "交流室1" if r == "地域交流室１（会議室）" else "交流室2"
+            
+            if is_closed:
+                # 休館日の表示
+                calendar_events.append({
+                    "title": f"⚪ {display_room_name}:休館",
+                    "start": loop_date.strftime('%Y-%m-%d'),
+                    "allDay": True,
+                    "color": "#e0e0e0"  # 薄いグレー
+                })
+            else:
+                # 予約が入っているかチェック
+                has_booking = False
+                for b in st.session_state.bookings:
+                    if b['date'] == loop_date and b['room'] == r:
+                        has_booking = True
+                        break
+                
+                if has_booking:
+                    # 【変更】予約がある日は「空き無し（赤）」
+                    calendar_events.append({
+                        "title": f"🔴 {display_room_name}:空き無し",
+                        "start": loop_date.strftime('%Y-%m-%d'),
+                        "allDay": True,
+                        "color": "#ff4b4b"  # 赤色
+                    })
+                else:
+                    # 【変更】予約がない日は「空きあり（緑）」
+                    calendar_events.append({
+                        "title": f"🟢 {display_room_name}:空きあり",
+                        "start": loop_date.strftime('%Y-%m-%d'),
+                        "allDay": True,
+                        "color": "#2cd15a"  # 緑色
+                    })
+    
     calendar_options = {
         "editable": False,
         "selectable": False,
@@ -163,20 +200,20 @@ if st.session_state.page == "input_datetime":
         "headerToolbar": {
             "left": "prev,next today",
             "center": "title",
-            "right": "dayGridMonth,timeGridWeek"
+            "right": "dayGridMonth"
         },
         "initialView": "dayGridMonth",
     }
     
-    # カレンダーの表示
     calendar(events=calendar_events, options=calendar_options)
 
 
 # ==========================================
-# 画面2：ステップ2（使用者情報の入力フォーム）
+# 画面2：使用者情報の入力
 # ==========================================
 elif st.session_state.page == "input_personal_info":
-    st.subheader("ステップ2: ご使用者情報の入力")
+    # 【変更】ステップ2の名称を変更
+    st.subheader("使用者情報の入力")
     
     temp = st.session_state.temp_booking
     st.info(f"📋 選択中の日時: {temp['date'].strftime('%Y/%m/%d')} {temp['start_time'].strftime('%H:%M')}〜{temp['end_time'].strftime('%H:%M')} ({temp['room']})")
