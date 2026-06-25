@@ -27,19 +27,18 @@ def set_bg_video(video_file):
         object-fit: cover;
     }}
     
-    # === 【視認性の大改良】白い箱を消し、動画の上に「白文字＋くっきり黒ぶち」を表示 === #
-    .main .block-container {{
-        background-color: transparent !important; /* 白い背景の箱を完全に撤廃 */
-        padding: 2.5rem;
-        box-shadow: none !important;
-    }}
-    
-    /* 通常の文字、チェックボックス、ラジオボタンの文字をすべて「白文字＋強力な黒ぶち」にする */
+    /* === 【究極の統一】例外なく、画面上の「すべての文字」を白文字＋くっきり黒ぶちにする === */
+    *, 
+    .stApp, 
     .main .block-container, 
-    .main .block-container *, 
-    .stMarkdown, .stSubheader, .stTitle {{
-        color: #ffffff !important; /* 文字は純白 */
-        /* 上下左右・斜めの全方向に1ピクセルの黒い影を敷き詰め、クッキリした綺麗な縁取りを作ります */
+    .stMarkdown, .stSubheader, .stTitle, 
+    input, select, textarea, button, 
+    div[data-testid="stExpander"] *, 
+    .fc *,
+    div[role="listbox"] *,
+    .stAlert * {{
+        color: #ffffff !important; /* すべて純白 */
+        /* 全方向への強力な黒ぶち（縁取り） */
         text-shadow: 
             1px 1px 0px #000000,
             -1px -1px 0px #000000,
@@ -49,36 +48,35 @@ def set_bg_video(video_file):
             0px -1px 0px #000000,
             1px 0px 0px #000000,
             -1px 0px 0px #000000,
-            2px 2px 4px rgba(0,0,0,0.8) !important;
+            2px 2px 4px rgba(0,0,0,0.9) !important;
     }}
     
-    /* 【安全ガード】入力フォーム（名前や住所の欄）は、文字が見えなくならないよう白背景・黒文字（ぶちなし）に固定 */
-    input, select, textarea {{
-        color: #111111 !important;
-        background-color: #ffffff !important;
-        text-shadow: none !important;
+    /* === 背景の完全透明化と枠線の調整 === */
+    /* 中央ボックス、入力欄、ボタン、カレンダー、折りたたみの背景をすべて透明にし、動画の上に直接文字を乗せる */
+    .main .block-container, 
+    input, select, textarea, button,
+    div[data-testid="stExpander"],
+    .fc, .fc-theme-standard td, .fc-theme-standard th {{
+        background-color: transparent !important;
+        background: transparent !important;
+        border: 1px solid rgba(255, 255, 255, 0.4) !important; /* 枠線は薄い白にして上品に */
     }}
     
-    /* ボタンは目立つように「青背景に白文字（ぶちなし）」にします */
-    button, p[data-testid="stFormSubmitButton"] button {{
-        color: #ffffff !important;
-        background-color: #007bff !important;
-        border-radius: 5px !important;
-        text-shadow: none !important;
+    /* 入力フォームをクリックしたときの枠線強調 */
+    input:focus, select:focus, textarea:focus {{
+        border: 1px solid #ffffff !important;
+        outline: none !important;
     }}
     
-    /* 【安全ガード】カレンダーが入っている折りたたみ（Expander）は、カレンダーが動画と混ざらないよう全体を白背景にする */
-    div[data-testid="stExpander"] {{
-        background-color: #ffffff !important;
-        border-radius: 10px !important;
-        padding: 15px !important;
-        box-shadow: 0 4px 12px rgba(0,0,0,0.1) !important;
+    /* ボタンのホバー（マウスを乗せたとき）の背景を少し見やすく */
+    button:hover {{
+        background-color: rgba(255, 255, 255, 0.1) !important;
     }}
     
-    /* カレンダーと折りたたみの中の文字は、すべて通常の読みやすい黒文字（ぶちなし）に戻す */
-    div[data-testid="stExpander"] *, .fc * {{
-        color: #111111 !important;
-        text-shadow: none !important;
+    /* 【視覚ガード】部屋選択などのドロップダウンメニューが開いた時、背景が透明すぎると重なって見えなくなるため、メニュー背景だけは暗い半透明にします */
+    div[data-baseweb="popover"], div[role="listbox"], ul[role="listbox"] {{
+        background-color: rgba(15, 15, 15, 0.95) !important;
+        border: 1px solid rgba(255, 255, 255, 0.3) !important;
     }}
     </style>
     <video autoplay loop muted playsinline id="bg-video">
