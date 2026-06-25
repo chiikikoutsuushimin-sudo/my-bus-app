@@ -17,6 +17,8 @@ def set_bg_video(video_file):
     
     video_html = f'''
     <style>
+    header {{ visibility: hidden; }}
+    footer {{ visibility: hidden; }}
     .stApp {{ background: transparent; }}
     #bg-video {{
         position: fixed; right: 0; bottom: 0; min-width: 100%; min-height: 100%;
