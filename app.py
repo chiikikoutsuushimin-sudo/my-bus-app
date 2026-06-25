@@ -65,8 +65,8 @@ if "bookings" not in st.session_state:
 if "temp_booking" not in st.session_state:
     st.session_state.temp_booking = {}
 
-# 【変更】タイトルを「庄原市交通交流施設」に変更
-st.title("庄原市交通交流施設")
+# 【変更】タイトルを「庄原市交通交流施設オンライン予約」に変更
+st.title("庄原市交通交流施設オンライン予約")
 
 
 # ==========================================
@@ -74,7 +74,6 @@ st.title("庄原市交通交流施設")
 # ==========================================
 if st.session_state.page == "input_datetime":
     st.write("利用可能時間：9:00〜21:00（※12月29日〜1月3日は年末年始のため終日貸出不可）")
-    # 【変更】ステップ1の名称を変更
     st.subheader("申請日時と使用場所選択")
 
     room = st.selectbox("部屋を選択してください", [
@@ -140,20 +139,20 @@ if st.session_state.page == "input_datetime":
             st.rerun()
 
     st.write("---")
-    # 【変更】カレンダーのタイトルを変更
-    st.subheader("🗓️ 現在の予約カレンダー")
+    # 【変更】タイトルを「現在の予約」に変更
+    st.subheader("🗓️ 現在の予約")
+    # 【追加】「現在の予約」の下に注意事項を表示
+    st.write("※緑表示の場合は予約可能、赤表示の場合は予約不可となります")
     
-    # --- 【新機能】毎日・各部屋の「空きあり/空き無し」を自動計算してカレンダーに敷き詰める ---
+    # --- 毎日・各部屋の「空きあり/空き無し」を自動計算してカレンダーに敷き詰める ---
     calendar_events = []
     
-    # 選択された日付の月の1日から、約60日分（翌月末まで）の空き状況を自動作成
     start_grid_date = selected_date.replace(day=1)
     rooms_list = ["地域交流室１（会議室）", "地域交流室２（多目的スペース）"]
     
     for day_offset in range(60):
         loop_date = start_grid_date + datetime.timedelta(days=day_offset)
         
-        # 年末年始（12/29〜1/3）の休館判定
         is_closed = (loop_date.month == 12 and loop_date.day >= 29) or \
                     (loop_date.month == 1 and loop_date.day <= 3)
                     
@@ -161,15 +160,13 @@ if st.session_state.page == "input_datetime":
             display_room_name = "交流室1" if r == "地域交流室１（会議室）" else "交流室2"
             
             if is_closed:
-                # 休館日の表示
                 calendar_events.append({
                     "title": f"⚪ {display_room_name}:休館",
                     "start": loop_date.strftime('%Y-%m-%d'),
                     "allDay": True,
-                    "color": "#e0e0e0"  # 薄いグレー
+                    "color": "#e0e0e0"
                 })
             else:
-                # 予約が入っているかチェック
                 has_booking = False
                 for b in st.session_state.bookings:
                     if b['date'] == loop_date and b['room'] == r:
@@ -177,20 +174,18 @@ if st.session_state.page == "input_datetime":
                         break
                 
                 if has_booking:
-                    # 【変更】予約がある日は「空き無し（赤）」
                     calendar_events.append({
                         "title": f"🔴 {display_room_name}:空き無し",
                         "start": loop_date.strftime('%Y-%m-%d'),
                         "allDay": True,
-                        "color": "#ff4b4b"  # 赤色
+                        "color": "#ff4b4b"
                     })
                 else:
-                    # 【変更】予約がない日は「空きあり（緑）」
                     calendar_events.append({
                         "title": f"🟢 {display_room_name}:空きあり",
                         "start": loop_date.strftime('%Y-%m-%d'),
                         "allDay": True,
-                        "color": "#2cd15a"  # 緑色
+                        "color": "#2cd15a"
                     })
     
     calendar_options = {
@@ -212,7 +207,6 @@ if st.session_state.page == "input_datetime":
 # 画面2：使用者情報の入力
 # ==========================================
 elif st.session_state.page == "input_personal_info":
-    # 【変更】ステップ2の名称を変更
     st.subheader("使用者情報の入力")
     
     temp = st.session_state.temp_booking
