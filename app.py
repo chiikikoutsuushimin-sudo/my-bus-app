@@ -44,18 +44,12 @@ def set_bg_video(video_file):
         text-shadow: none !important;
         color: black !important;
     }}
-    /* 時間割テーブル用のスタイル調整 */
-    .timetable-table {{
-        width: 100%;
-        border-collapse: collapse;
-        text-align: center;
-        margin-bottom: 20px;
-    }}
-    .timetable-table th, .timetable-table td {{
+    /* チェックボックス全体の背景を少し見やすくする装飾 */
+    .slot-container {{
+        background-color: rgba(0, 0, 0, 0.05);
         padding: 10px;
-        color: black !important;
-        text-shadow: none !important;
-        border: 1px solid #ddd;
+        border-radius: 8px;
+        margin-bottom: 15px;
     }}
     </style>
     <video autoplay loop muted playsinline id="bg-video">
@@ -93,7 +87,7 @@ if st.session_state.page == "input_datetime":
         "地域交流室２（多目的スペース）"
     ])
 
-    # --- 【新機能１】日付のガードレール（過去や今年度末以降を選択不可にする） ---
+    # 日付のガードレール（過去や今年度末以降を選択不可にする）
     today = datetime.date.today()
     if today.month <= 3:
         fiscal_end_year = today.year
@@ -101,7 +95,6 @@ if st.session_state.page == "input_datetime":
         fiscal_end_year = today.year + 1
     max_date = datetime.date(fiscal_end_year, 3, 31)
 
-    # 最小値を今日(min_value)、最大値を3月末(max_value)に固定
     selected_date = st.date_input(
         "日付を選択してください", 
         min_value=today, 
@@ -109,84 +102,96 @@ if st.session_state.page == "input_datetime":
         value=today
     )
 
-    # --- 選択された部屋・日付の「1時間ごとの◯×時間割表」を表示 ---
-    st.write(f"### 🕒 {selected_date.strftime('%Y年%m月%d日')} の空き時間割")
+    # --- 【大改造】時間割表自体をポチポチ選べるチェックボックスに変更 ---
+    st.write(f"### 🕒 {selected_date.strftime('%Y年%m月%d日')} の時間割（利用する時間にチェック）")
+    st.write("※利用したい時間帯をすべてポチポチと選択してください（複数選択可）")
     
     is_closed_date = (selected_date.month == 12 and selected_date.day >= 29) or \
                      (selected_date.month == 1 and selected_date.day <= 3)
                      
-    timetable_html = "<table class='timetable-table'>"
-    timetable_html += "<tr style='background-color: #f2f2f2; font-weight: bold;'><th>時間帯</th><th>空き状況</th></tr>"
+    selected_slots = []
     
+    # 9:00〜21:00まで1時間ごとにチェックボックスを生成
     for h in range(9, 21):
         slot_start = datetime.time(h, 0)
         slot_end = datetime.time(h+1, 0)
         slot_text = f"{h}:00 〜 {h+1}:00"
         
         if is_closed_date:
-            status = "⚪ 休館日"
-            bg_color = "#e0e0e0"
+            st.checkbox(f"⚪ {slot_text} 【休館日】", disabled=True, key=f"slot_{h}")
         else:
+            # すでに予約が入っているかチェック
             booked = False
             for b in st.session_state.bookings:
                 if b['date'] == selected_date and b['room'] == room:
                     if not (slot_end <= b['start_time'] or slot_start >= b['end_time']):
                         booked = True
                         break
+            
             if booked:
-                status = "🔴 予約不可"
-                bg_color = "#ffcccc"
+                st.checkbox(f"🔴 {slot_text} 【予約不可（先約あり）】", disabled=True, key=f"slot_{h}")
             else:
-                status = "🟢 予約可能"
-                bg_color = "#ccffcc"
-        
-        timetable_html += f"<tr style='background-color: {bg_color};'><td>{slot_text}</td><td style='font-weight: bold;'>{status}</td></tr>"
-    timetable_html += "</table>"
-    
-    st.markdown(timetable_html, unsafe_allow_html=True)
-    st.write("上記のご利用空き状況をご確認の上、以下の開始・終了時間を選択してください。")
+                # 空いている時間はユーザーがポチポチ選べる！
+                if st.checkbox(f"🟢 {slot_text} 【予約可能】", key=f"slot_{h}"):
+                    selected_slots.append(h)
 
-    # --- 【新機能２】終了時間の自動連動（エラーの未然防止） ---
-    # 開始時間は 9:00 〜 20:00 まで選択可能
-    start_time_options = [datetime.time(h, 0) for h in range(9, 21)]
-    start_time = st.selectbox("開始時間", start_time_options, format_func=lambda t: t.strftime("%H:%M"))
-
-    # 終了時間は、選択された「開始時間＋1時間」以降しか選べないように動的連動
-    end_time_options = [datetime.time(h, 0) for h in range(start_time.hour + 1, 22)]
-    end_time = st.selectbox("終了時間", end_time_options, format_func=lambda t: t.strftime("%H:%M"))
+    st.write("---")
 
     usage_type = st.radio("利用区分", ["一般使用", "営利、宣伝等での使用"])
     use_ac = st.checkbox("冷暖房を使用する")
 
-    # --- 【新機能３】その場でリアルタイム料金計算 ---
-    hours = end_time.hour - start_time.hour
+    # --- 選択された時間の計算とリアルタイム料金表示 ---
+    hours = 0
     total_fee = 0
-    if usage_type == "営利、宣伝等での使用":
-        if room == "地域交流室１（会議室）":
-            total_fee += 1040 * hours
-        else:
-            total_fee += 520 * hours
-        if use_ac:
-            total_fee += 310 * hours
+    start_time = None
+    end_time = None
+    has_slot_error = False
 
-    # 画面1のボタンのすぐ上に大きくリアルタイム料金を通知
+    if selected_slots:
+        selected_slots.sort()
+        # 飛び飛びで選択されていないか（連続性）のチェック
+        is_continuous = True
+        for i in range(len(selected_slots) - 1):
+            if selected_slots[i+1] - selected_slots[i] != 1:
+                is_continuous = False
+                break
+        
+        if not is_continuous:
+            st.error("❌ エラー：時間は飛び飛びではなく、連続した時間帯で選択してください。")
+            has_slot_error = True
+        else:
+            start_h = selected_slots[0]
+            end_h = selected_slots[-1] + 1
+            start_time = datetime.time(start_h, 0)
+            end_time = datetime.time(end_h, 0)
+            hours = len(selected_slots)
+            
+            # 料金計算
+            if usage_type == "営利、宣伝等での使用":
+                if room == "地域交流室１（会議室）":
+                    total_fee += 1040 * hours
+                else:
+                    total_fee += 520 * hours
+                if use_ac:
+                    total_fee += 310 * hours
+            
+            # 選択中の時間をわかりやすく表示
+            st.info(f"🎵 選択中：{start_time.strftime('%H:%M')} 〜 {end_time.strftime('%H:%M')}")
+    else:
+        st.warning("⚠️ 上の時間割から、利用したい時間帯にチェックを入れてください。")
+
+    # リアルタイム料金を大きく通知
     st.markdown(f"### 💰 現在の概算料金: **{total_fee:,} 円** *(利用時間: {hours}時間)*")
 
     if st.button("次へ進む（連絡先等の入力へ）"):
-        has_error = False
-
-        if is_closed_date:
-            st.error("❌ エラー：12月29日から翌年1月3日は年末年始の休館期間のため、予約できません。")
-            has_error = True
-
-        for b in st.session_state.bookings:
-            if b['date'] == selected_date and b['room'] == room:
-                if not (end_time <= b['start_time'] or start_time >= b['end_time']):
-                    st.error("❌ エラー：選択された日時はすでに予約が入っています。")
-                    has_error = True
-                    break
-
-        if not has_error:
+        if not selected_slots:
+            st.error("❌ エラー：時間帯が選択されていません。時間割の🟢にチェックを入れてください。")
+        elif has_slot_error:
+            st.error("❌ エラー：時間帯の選択を修正してください。")
+        elif is_closed_date:
+            st.error("❌ エラー：年末年始の休館期間のため、予約できません。")
+        else:
+            # すべてOKなら次の画面へ
             st.session_state.temp_booking = {
                 "room": room,
                 "date": selected_date,
