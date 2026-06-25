@@ -1,7 +1,6 @@
 import streamlit as st
 import datetime
 import base64
-import pandas as pd  # 美しい表形式を実現するために追加
 from streamlit_calendar import calendar
 
 # --- 背景に動画を設定する関数 ---
@@ -27,42 +26,43 @@ def set_bg_video(video_file):
         z-index: -1;
         object-fit: cover;
     }}
+    
+    /* === 【視認性の劇的改善】中央のボックスを完全な不透明の白にし、文字をクッキリした黒にする === */
     .main .block-container {{
-        background-color: rgba(255, 255, 255, 1.0);
+        background-color: #ffffff !important; /* 後ろの動画が絶対に透けない純白の背景 */
         padding: 2.5rem;
         border-radius: 15px;
-        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-    }}
-    .stApp, .stApp *, .stMarkdown, .stSubheader, .stTitle, .stSelectbox label, .stRadio label, .stCheckbox label, .stTextArea label, .stNumberInput label, .stTextInput label {{
-        color: white !important;
-        text-shadow: 1px 1px 1px black, -1px -1px 1px black, 1px -1px 1px black, -1px 1px 1px black, 2px 2px 3px rgba(0,0,0,0.8) !important;
-    }}
-    input, select, textarea, button {{
-        color: black !important;
-        text-shadow: none !important;
-    }}
-    .fc * {{
-        text-shadow: none !important;
-        color: black !important;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.25);
     }}
     
-    /* === 【大改良】データエディタ内の文字保護と余計なUIの完全消去 === */
-    div[data-testid="stDataEditor"] * {{
-        color: black !important;
+    /* ボックス内のすべての文字（タイトル、説明、チェックボックスの文字など）を濃い黒に統一 */
+    .main .block-container, 
+    .main .block-container *, 
+    .stMarkdown, .stSubheader, .stTitle, 
+    .stSelectbox label, .stRadio label, .stCheckbox label, .stTextArea label, .stNumberInput label, .stTextInput label {{
+        color: #111111 !important; /* 読みやすさ抜群の濃い黒 */
+        text-shadow: none !important; /* 見づらさの原因だった文字の縁取りを完全に撤廃 */
+    }}
+    
+    /* 入力フォームや選択ボックス、ボタンの見やすさ調整 */
+    input, select, textarea {{
+        color: #111111 !important;
+        background-color: #f7f9fa !important;
+        border: 1px solid #cccccc !important;
+    }}
+    
+    /* ボタンだけは目立つように、青い背景に白い文字にします */
+    button, p[data-testid="stFormSubmitButton"] button {{
+        color: white !important;
+        background-color: #007bff !important;
+        border-radius: 5px !important;
         text-shadow: none !important;
     }}
-    /* 右上の余計なツールバー（検索・ダウンロード等）を完全に非表示 */
-    div[data-testid="stDataEditorToolbar"] {{
-        display: none !important;
-    }}
-    /* 列ヘッダーの並び替えボタンやメニューを無効化（触らせない） */
-    div[data-testid="stDataEditor"] th button {{
-        display: none !important;
-        pointer-events: none !important;
-    }}
-    /* ヘッダーの文字を中央揃えにし、ユーザーが列幅を変更するのを抑制 */
-    div[data-testid="stDataEditor"] th {{
-        pointer-events: none !important;
+    
+    /* カレンダーの中の文字も黒にして見やすく固定 */
+    .fc * {{
+        text-shadow: none !important;
+        color: #111111 !important;
     }}
     </style>
     <video autoplay loop muted playsinline id="bg-video">
@@ -115,20 +115,22 @@ if st.session_state.page == "input_datetime":
         value=today
     )
 
-    # --- 公式データエディタによる、完全な一体型時間割テーブル ---
+    # --- 【大改善】一番シンプルで迷わない、通常の縦並びチェックボックス形式 ---
     st.write(f"### 🕒 {selected_date.strftime('%Y年%m月%d日')} の空き状況および時間帯選択")
-    st.write("ご利用を希望される時間帯の「選択」欄にチェックを入れてください（複数選択可）。")
+    st.write("ご利用を希望される時間帯にチェックを入れてください（複数選択可）。")
     
     is_closed_date = (selected_date.month == 12 and selected_date.day >= 29) or \
                      (selected_date.month == 1 and selected_date.day <= 3)
                      
-    # 表示用の時間割データを構築
-    timetable_records = []
+    selected_slots = []
+    
+    # 9:00〜21:00まで、1時間ごとに1つずつチェックボックスを並べる
     for h in range(9, 21):
         slot_text = f"{h}:00 〜 {h+1}:00"
         
         if is_closed_date:
             status = "⚪ 休館日"
+            is_disabled = True
         else:
             booked = False
             for b in st.session_state.bookings:
@@ -138,36 +140,17 @@ if st.session_state.page == "input_datetime":
                         break
             if booked:
                 status = "🔴 予約不可（先約あり）"
+                is_disabled = True
             else:
                 status = "🟢 予約可能"
+                is_disabled = False
         
-        timetable_records.append({
-            "選択": False,
-            "時間帯": slot_text,
-            "空き状況": status,
-            "hour_code": h  # 内部計算用の隠しデータ
-        })
-
-    # 機械的なリストから美しい表（DataFrame）に変換
-    df_timetable = pd.DataFrame(timetable_records)
-
-    # 公式のインタラクティブな表として画面に描画（余計な機能をCSSと引数で徹底ロック）
-    edited_df = st.data_editor(
-        df_timetable,
-        column_config={
-            "選択": st.column_config.CheckboxColumn("選択", default=False, width="small"),
-            "時間帯": st.column_config.TextColumn("時間帯", disabled=True, width="medium"),
-            "空き状況": st.column_config.TextColumn("空き状況", disabled=True, width="medium"),
-            "hour_code": None  # 画面には非表示
-        },
-        hide_index=True,          # 左側の不要な数字（インデックス）を隠す
-        use_container_width=True, # 横幅いっぱいに綺麗に広げる
-        key="timetable_editor"
-    )
-
-    # 利用者がチェックを入れた行だけを抽出
-    selected_rows = edited_df[edited_df["選択"] == True]
-    selected_slots = selected_rows["hour_code"].tolist()
+        # 予約できない時間帯は、最初からグレーアウト（disabled=True）にして触らせない安全設計
+        if is_disabled:
+            st.checkbox(f"{slot_text}  【 {status} 】", value=False, disabled=True, key=f"slot_{h}")
+        else:
+            if st.checkbox(f"{slot_text}  【 {status} 】", value=False, key=f"slot_{h}"):
+                selected_slots.append(h)
 
     st.write("---")
 
@@ -180,17 +163,8 @@ if st.session_state.page == "input_datetime":
     start_time = None
     end_time = None
     has_slot_error = False
-    has_invalid_selection = False
 
-    # 予約不可や休館日にチェックが入っていないか確認
-    for idx, row in selected_rows.iterrows():
-        if "🟢" not in row["空き状況"]:
-            has_invalid_selection = True
-
-    if has_invalid_selection:
-        st.error("❌ エラー：予約不可または休館日の時間帯が選択されています。選択を解除してください。")
-
-    elif selected_slots:
+    if selected_slots:
         selected_slots.sort()
         # 連続した時間帯が選ばれているかのチェック
         is_continuous = True
@@ -221,16 +195,16 @@ if st.session_state.page == "input_datetime":
             # 選択中の確定時間を明示
             st.info(f"📋 選択中の時間帯: {start_time.strftime('%H:%M')} 〜 {end_time.strftime('%H:%M')}")
     else:
-        st.warning("⚠️ 上記の時間割表より、ご利用になる時間帯にチェックを入れてください。")
+        st.warning("⚠️ 上記の一覧より、ご利用になる時間帯にチェックを入れてください。")
 
     # リアルタイム料金の提示
     st.markdown(f"### 💰 現在の概算料金: **{total_fee:,} 円** *(利用時間: {hours}時間)*")
 
     if st.button("次へ進む（連絡先等の入力へ）"):
         if not selected_slots:
-            st.error("❌ エラー：時間帯が選択されていません。時間割表の「選択」欄にチェックを入れてください。")
-        elif has_slot_error or has_invalid_selection:
-            st.error("❌ エラー：時間帯の選択内容に不備があります。修正してください。")
+            st.error("❌ エラー：時間帯が選択されていません。ご希望の時間帯にチェックを入れてください。")
+        elif has_slot_error:
+            st.error("❌ エラー：時間帯の選択内容に不備があります。連続した時間になるよう修正してください。")
         elif is_closed_date:
             st.error("❌ エラー：年末年始の休館期間のため、予約手続きを進めることはできません。")
         else:
