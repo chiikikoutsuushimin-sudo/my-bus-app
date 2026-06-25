@@ -44,18 +44,74 @@ def set_bg_video(video_file):
         text-shadow: none !important;
         color: black !important;
     }}
-    /* 時間割テーブル用のスタイル調整 */
-    .timetable-table {{
-        width: 100%;
-        border-collapse: collapse;
+    
+    /* --- 新しい時間割テーブル風スタイル（文字の視認性を最優先） --- */
+    .timetable-header-marker + div {{
+        background-color: #f2f2f2 !important;
+        border: 1px solid #ddd;
+        padding: 10px 5px;
+        border-top-left-radius: 6px;
+        border-top-right-radius: 6px;
         text-align: center;
-        margin-bottom: 20px;
     }}
-    .timetable-table th, .timetable-table td {{
-        padding: 10px;
+    .timetable-header-marker + div * {{
         color: black !important;
         text-shadow: none !important;
-        border: 1px solid #ddd;
+        font-weight: bold !important;
+    }}
+    
+    /* 予約可能行（薄緑・不透明） */
+    .timetable-row-marker-available + div {{
+        background-color: #ccffcc !important;
+        border-left: 1px solid #ddd;
+        border-right: 1px solid #ddd;
+        border-bottom: 1px solid #ddd;
+        padding: 6px 5px;
+        text-align: center;
+    }}
+    .timetable-row-marker-available + div * {{
+        color: black !important;
+        text-shadow: none !important;
+    }}
+    
+    /* 予約不可行（薄赤・不透明） */
+    .timetable-row-marker-booked + div {{
+        background-color: #ffcccc !important;
+        border-left: 1px solid #ddd;
+        border-right: 1px solid #ddd;
+        border-bottom: 1px solid #ddd;
+        padding: 6px 5px;
+        text-align: center;
+    }}
+    .timetable-row-marker-booked + div * {{
+        color: black !important;
+        text-shadow: none !important;
+    }}
+    
+    /* 休館日行（グレー・不透明） */
+    .timetable-row-marker-closed + div {{
+        background-color: #e0e0e0 !important;
+        border-left: 1px solid #ddd;
+        border-right: 1px solid #ddd;
+        border-bottom: 1px solid #ddd;
+        padding: 6px 5px;
+        text-align: center;
+    }}
+    .timetable-row-marker-closed + div * {{
+        color: black !important;
+        text-shadow: none !important;
+    }}
+    
+    /* テーブル内チェックボックスの中央配置調整 */
+    .timetable-cb-container {{
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        height: 100%;
+    }}
+    .timetable-cb-container div[data-testid="stCheckbox"] {{
+        margin-bottom: 0px;
+        padding-top: 4px;
     }}
     </style>
     <video autoplay loop muted playsinline id="bg-video">
@@ -108,85 +164,128 @@ if st.session_state.page == "input_datetime":
         value=today
     )
 
-    # --- 【修正】見やすい「1時間ごとの表形式」に完全復元 ---
-    st.write(f"### 🕒 {selected_date.strftime('%Y年%m月%d日')} の空き時間割")
+    # --- 【大改良】美しさと利便性を両立した「チェックボックス一体型・時間割表」 ---
+    st.write(f"### 🕒 {selected_date.strftime('%Y年%m月%d日')} の空き状況および時間帯選択")
+    st.write("ご利用を希望される時間帯の「選択」欄にチェックを入れてください（複数選択可）。")
     
     is_closed_date = (selected_date.month == 12 and selected_date.day >= 29) or \
                      (selected_date.month == 1 and selected_date.day <= 3)
                      
-    timetable_html = "<table class='timetable-table'>"
-    timetable_html += "<tr style='background-color: #f2f2f2; font-weight: bold;'><th>時間帯</th><th>空き状況</th></tr>"
+    # テーブルヘッダーの描画
+    st.markdown('<div class="timetable-header-marker"></div>', unsafe_allow_html=True)
+    with st.container():
+        h_col1, h_col2, h_col3 = st.columns([1, 2, 2])
+        h_col1.markdown("選択")
+        h_col2.markdown("時間帯")
+        h_col3.markdown("空き状況")
+
+    selected_slots = []
     
+    # 9:00から21:00まで1時間ごとにテーブル行を生成
     for h in range(9, 21):
         slot_start = datetime.time(h, 0)
         slot_end = datetime.time(h+1, 0)
         slot_text = f"{h}:00 〜 {h+1}:00"
         
         if is_closed_date:
-            status = "⚪ 休館日"
-            bg_color = "#e0e0e0"
+            st.markdown('<div class="timetable-row-marker-closed"></div>', unsafe_allow_html=True)
+            with st.container():
+                col1, col2, col3 = st.columns([1, 2, 2])
+                with col1:
+                    st.markdown('<div class="timetable-cb-container">', unsafe_allow_html=True)
+                    st.checkbox("", disabled=True, key=f"slot_cb_{h}")
+                    st.markdown('</div>', unsafe_allow_html=True)
+                col2.write(slot_text)
+                col3.write("⚪ 休館日")
         else:
+            # 先約の重複チェック
             booked = False
             for b in st.session_state.bookings:
                 if b['date'] == selected_date and b['room'] == room:
                     if not (slot_end <= b['start_time'] or slot_start >= b['end_time']):
                         booked = True
                         break
+            
             if booked:
-                status = "🔴 予約不可"
-                bg_color = "#ffcccc"
+                st.markdown('<div class="timetable-row-marker-booked"></div>', unsafe_allow_html=True)
+                with st.container():
+                    col1, col2, col3 = st.columns([1, 2, 2])
+                    with col1:
+                        st.markdown('<div class="timetable-cb-container">', unsafe_allow_html=True)
+                        st.checkbox("", disabled=True, key=f"slot_cb_{h}")
+                        st.markdown('</div>', unsafe_allow_html=True)
+                    col2.write(slot_text)
+                    col3.write("🔴 予約不可（先約あり）")
             else:
-                status = "🟢 予約可能"
-                bg_color = "#ccffcc"
-        
-        timetable_html += f"<tr style='background-color: {bg_color};'><td>{slot_text}</td><td style='font-weight: bold;'>{status}</td></tr>"
-    timetable_html += "</table>"
-    
-    st.markdown(timetable_html, unsafe_allow_html=True)
-    st.write("上記のご利用空き状況をご確認の上、以下の開始・終了時間を選択してください。")
+                # 予約可能な行（薄緑背景の中に、チェックボックスを配置）
+                st.markdown('<div class="timetable-row-marker-available"></div>', unsafe_allow_html=True)
+                with st.container():
+                    col1, col2, col3 = st.columns([1, 2, 2])
+                    with col1:
+                        st.markdown('<div class="timetable-cb-container">', unsafe_allow_html=True)
+                        if st.checkbox("", key=f"slot_cb_{h}"):
+                            selected_slots.append(h)
+                        st.markdown('</div>', unsafe_allow_html=True)
+                    col2.write(slot_text)
+                    col3.write("🟢 予約可能")
 
-    # --- 時間選択（プルダウンに戻しつつ、終了時間の自動連動は維持） ---
-    # 開始時間は 9:00 〜 20:00 まで選択可能
-    start_time_options = [datetime.time(h, 0) for h in range(9, 21)]
-    start_time = st.selectbox("開始時間", start_time_options, format_func=lambda t: t.strftime("%H:%M"))
-
-    # 終了時間は、選択された「開始時間＋1時間」以降しか選べないように動的連動
-    end_time_options = [datetime.time(h, 0) for h in range(start_time.hour + 1, 22)]
-    end_time = st.selectbox("終了時間", end_time_options, format_func=lambda t: t.strftime("%H:%M"))
+    st.write("---")
 
     usage_type = st.radio("利用区分", ["一般使用", "営利、宣伝等での使用"])
     use_ac = st.checkbox("冷暖房を使用する")
 
-    # --- その場でリアルタイム料金計算 ---
-    hours = end_time.hour - start_time.hour
+    # --- 選択された時間の自動計算およびリアルタイム料金表示 ---
+    hours = 0
     total_fee = 0
-    if usage_type == "営利、宣伝等での使用":
-        if room == "地域交流室１（会議室）":
-            total_fee += 1040 * hours
-        else:
-            total_fee += 520 * hours
-        if use_ac:
-            total_fee += 310 * hours
+    start_time = None
+    end_time = None
+    has_slot_error = False
 
-    # リアルタイム料金を表示
+    if selected_slots:
+        selected_slots.sort()
+        # 連続して選択されているかの検証（飛び飛びの選択を抑止）
+        is_continuous = True
+        for i in range(len(selected_slots) - 1):
+            if selected_slots[i+1] - selected_slots[i] != 1:
+                is_continuous = False
+                break
+        
+        if not is_continuous:
+            st.error("❌ エラー：ご利用時間は、途切れることなく連続した時間帯で選択してください。")
+            has_slot_error = True
+        else:
+            start_h = selected_slots[0]
+            end_h = selected_slots[-1] + 1
+            start_time = datetime.time(start_h, 0)
+            end_time = datetime.time(end_h, 0)
+            hours = len(selected_slots)
+            
+            # 料金算出
+            if usage_type == "営利、宣伝等での使用":
+                if room == "地域交流室１（会議室）":
+                    total_fee += 1040 * hours
+                else:
+                    total_fee += 520 * hours
+                if use_ac:
+                    total_fee += 310 * hours
+            
+            # 選択された時間帯の確認表示
+            st.info(f"📋 選択中の時間帯: {start_time.strftime('%H:%M')} 〜 {end_time.strftime('%H:%M')}")
+    else:
+        st.warning("⚠️ 上記の時間割表より、ご利用になる時間帯にチェックを入れてください。")
+
+    # リアルタイム料金の提示
     st.markdown(f"### 💰 現在の概算料金: **{total_fee:,} 円** *(利用時間: {hours}時間)*")
 
     if st.button("次へ進む（連絡先等の入力へ）"):
-        has_error = False
-
-        if is_closed_date:
-            st.error("❌ エラー：12月29日から翌年1月3日は年末年始の休館期間のため、予約できません。")
-            has_error = True
-
-        # 重複チェック
-        for b in st.session_state.bookings:
-            if b['date'] == selected_date and b['room'] == room:
-                if not (end_time <= b['start_time'] or start_time >= b['end_time']):
-                    st.error("❌ エラー：選択された日時はすでに予約が入っています。")
-                    has_error = True
-                    break
-
-        if not has_error:
+        if not selected_slots:
+            st.error("❌ エラー：時間帯が選択されていません。時間割表の「選択」欄にチェックを入れてください。")
+        elif has_slot_error:
+            st.error("❌ エラー：時間帯の選択内容に不備があります。修正してください。")
+        elif is_closed_date:
+            st.error("❌ エラー：年末年始の休館期間のため、予約手続きを進めることはできません。")
+        else:
+            # 入力検証を通過した場合、次画面へ遷移
             st.session_state.temp_booking = {
                 "room": room,
                 "date": selected_date,
@@ -280,49 +379,4 @@ elif st.session_state.page == "input_personal_info":
 
     user_name = st.text_input("お名前 / 団体名（必須）")
     user_address = st.text_input("ご住所（必須）")
-    user_phone = st.text_input("ご連絡先電話番号（必須）")
-    user_purpose = st.text_area("使用目的（必須）")
-    user_count = st.number_input("利用人数（人）", min_value=1, max_value=500, value=1)
-
-    col1, col2 = st.columns(2)
-    with col1:
-        if st.button("⬅️ 日時選択に戻る"):
-            st.session_state.page = "input_datetime"
-            st.rerun()
-            
-    with col2:
-        if st.button("予約を確定する ➡️"):
-            if not user_name or not user_address or not user_phone or not user_purpose:
-                st.error("❌ エラー：必須項目（お名前・ご住所・ご連絡先・使用目的）をすべて入力してください。")
-            else:
-                final_booking = st.session_state.temp_booking.copy()
-                final_booking.update({
-                    "name": user_name,
-                    "address": user_address,
-                    "phone": user_phone,
-                    "purpose": user_purpose,
-                    "num_people": user_count
-                })
-                st.session_state.bookings.append(final_booking)
-                st.session_state.page = "completed"
-                st.rerun()
-
-
-# ==========================================
-# 画面3：予約完了画面
-# ==========================================
-elif st.session_state.page == "completed":
-    st.success("🎉 施設予約が確定しました！お申し込みありがとうございます。")
-    
-    last_b = st.session_state.bookings[-1]
-    st.write("### 🔑 受付内容の控え")
-    st.write(f"- **部屋名**: {last_b['room']}")
-    st.write(f"- **利用日時**: {last_b['date'].strftime('%Y/%m/%d')} {last_b['start_time'].strftime('%H:%M')}〜{last_b['end_time'].strftime('%H:%M')}")
-    st.write(f"- **申請者氏名**: {last_b['name']}")
-    st.write(f"- **利用人数**: {last_b['num_people']} 名")
-    st.write(f"- **概算料金**: {last_b['fee']} 円")
-    
-    st.write("---")
-    if st.button("トップページ（新規予約）へ戻る"):
-        st.session_state.page = "input_datetime"
-        st.rerun()
+    user_phone = st.text_input
