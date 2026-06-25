@@ -84,27 +84,21 @@ def set_bg_video(video_file):
     '''
     st.markdown(video_html, unsafe_allow_html=True)
 
-try:
-    set_bg_video("background.mp4")
-except FileNotFoundError:
-    st.warning("⚠️ 背景動画ファイル（background.mp4）が見つかりません。")
 
-
-# --- 【新機能】メールを自動送信する関数 ---
+# --- 【Gmail専用】メール自動送信関数 ---
 def send_email(to_email, subject, body):
     try:
-        # Streamlitの「隠し金庫（Secrets）」から安全にアカウント情報を読み込む
+        # 隠し金庫から情報を読み込み（送信元はGmail固定）
         gmail_user = st.secrets["gmail_user"]
         gmail_password = st.secrets["gmail_password"]
         
-        # メールの設定
         msg = MIMEMultipart()
         msg['From'] = gmail_user
         msg['To'] = to_email
         msg['Subject'] = subject
         msg.attach(MIMEText(body, 'plain', 'utf-8'))
         
-        # Gmailのサーバー（SMTP）に接続して送信
+        # Gmailの安心・確実な設定で送信
         server = smtplib.SMTP_SSL('smtp.gmail.com', 465)
         server.login(gmail_user, gmail_password)
         server.send_message(msg)
@@ -227,14 +221,8 @@ if st.session_state.page == "input_datetime":
             st.error("❌ エラー：年末年始の休館期間のため、予約手続きを進めることはできません。")
         else:
             st.session_state.temp_booking = {
-                "room": room,
-                "date": selected_date,
-                "start_time": start_time,
-                "end_time": end_time,
-                "usage_type": usage_type,
-                "use_ac": use_ac,
-                "fee": total_fee,
-                "hours": hours
+                "room": room, "date": selected_date, "start_time": start_time, "end_time": end_time,
+                "usage_type": usage_type, "use_ac": use_ac, "fee": total_fee, "hours": hours
             }
             st.session_state.page = "input_personal_info"
             st.rerun()
@@ -291,7 +279,7 @@ if st.session_state.page == "input_datetime":
 
 
 # ==========================================
-# 画面2：使用者情報の入力（メールアドレス欄を追加）
+# 画面2：使用者情報の入力
 # ==========================================
 elif st.session_state.page == "input_personal_info":
     st.subheader("使用者情報の入力")
@@ -300,7 +288,7 @@ elif st.session_state.page == "input_personal_info":
     st.info(f"📋 選択中の日時: {temp['date'].strftime('%Y/%m/%d')} {temp['start_time'].strftime('%H:%M')}〜{temp['end_time'].strftime('%H:%M')} ({temp['room']})")
 
     user_name = st.text_input("お名前 / 団体名（必須）")
-    user_email = st.text_input("メールアドレス（必須：予約控えをお送りします）")  # 新設！
+    user_email = st.text_input("メールアドレス（必須：予約控えをお送りします）")
     user_address = st.text_input("ご住所（必須）")
     user_phone = st.text_input("ご連絡先電話番号（必須）")
     user_purpose = st.text_area("使用目的（必須）")
@@ -315,18 +303,16 @@ elif st.session_state.page == "input_personal_info":
     with col2:
         if st.button("予約を確定する ➡️"):
             if not user_name or not user_email or not user_address or not user_phone or not user_purpose:
-                st.error("❌ エラー：必須項目（お名前・メールアドレス・ご住所・ご連絡先・使用目的）をすべて入力してください。")
+                st.error("❌ エラー：必須項目をすべて入力してください。")
             elif "@" not in user_email:
                 st.error("❌ エラー：正しいメールアドレスの形式で入力してください。")
             else:
-                # データの確定保存
                 final_booking = st.session_state.temp_booking.copy()
                 final_booking.update({
                     "name": user_name, "email": user_email, "address": user_address,
                     "phone": user_phone, "purpose": user_purpose, "num_people": user_count
                 })
                 
-                # --- メールの本文を作成 ---
                 mail_body = f"""庄原市交通交流施設 オンライン予約システムより自動送信
 
 以下の内容で施設の利用予約を受け付けました。
@@ -347,11 +333,12 @@ elif st.session_state.page == "input_personal_info":
 
 ※内容の変更やキャンセルを希望される場合は、施設管理者まで直接ご連絡ください。
 """
-                # --- メールの送信処理 ---
-                # 1. 申請者へ送信
+                # メール送信
+                # 1. 申請者へ（入力されたアドレス宛て）
                 send_email(user_email, "【施設予約】お申し込みを受け付けました", mail_body)
-                # 2. 管理者（あなた宛て）へ送信
-                send_email(st.secrets["gmail_user"], "【新規通知】施設予約の申し込みがありました", mail_body)
+                
+                # 2. 管理者へ（隠し金庫で指定した、あなたのアドレス宛て）
+                send_email(st.secrets["admin_email"], "【新規通知】施設予約の申し込みがありました", mail_body)
 
                 st.session_state.bookings.append(final_booking)
                 st.session_state.page = "completed"
