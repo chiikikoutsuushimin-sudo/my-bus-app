@@ -27,42 +27,58 @@ def set_bg_video(video_file):
         object-fit: cover;
     }}
     
-    /* === 【視認性の劇的改善】中央のボックスを完全な不透明の白にし、文字をクッキリした黒にする === */
+    # === 【視認性の大改良】白い箱を消し、動画の上に「白文字＋くっきり黒ぶち」を表示 === #
     .main .block-container {{
-        background-color: #ffffff !important; /* 後ろの動画が絶対に透けない純白の背景 */
+        background-color: transparent !important; /* 白い背景の箱を完全に撤廃 */
         padding: 2.5rem;
-        border-radius: 15px;
-        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.25);
+        box-shadow: none !important;
     }}
     
-    /* ボックス内のすべての文字（タイトル、説明、チェックボックスの文字など）を濃い黒に統一 */
+    /* 通常の文字、チェックボックス、ラジオボタンの文字をすべて「白文字＋強力な黒ぶち」にする */
     .main .block-container, 
     .main .block-container *, 
-    .stMarkdown, .stSubheader, .stTitle, 
-    .stSelectbox label, .stRadio label, .stCheckbox label, .stTextArea label, .stNumberInput label, .stTextInput label {{
-        color: #111111 !important; /* 読みやすさ抜群の濃い黒 */
-        text-shadow: none !important; /* 見づらさの原因だった文字の縁取りを完全に撤廃 */
+    .stMarkdown, .stSubheader, .stTitle {{
+        color: #ffffff !important; /* 文字は純白 */
+        /* 上下左右・斜めの全方向に1ピクセルの黒い影を敷き詰め、クッキリした綺麗な縁取りを作ります */
+        text-shadow: 
+            1px 1px 0px #000000,
+            -1px -1px 0px #000000,
+            1px -1px 0px #000000,
+            -1px 1px 0px #000000,
+            0px 1px 0px #000000,
+            0px -1px 0px #000000,
+            1px 0px 0px #000000,
+            -1px 0px 0px #000000,
+            2px 2px 4px rgba(0,0,0,0.8) !important;
     }}
     
-    /* 入力フォームや選択ボックス、ボタンの見やすさ調整 */
+    /* 【安全ガード】入力フォーム（名前や住所の欄）は、文字が見えなくならないよう白背景・黒文字（ぶちなし）に固定 */
     input, select, textarea {{
         color: #111111 !important;
-        background-color: #f7f9fa !important;
-        border: 1px solid #cccccc !important;
+        background-color: #ffffff !important;
+        text-shadow: none !important;
     }}
     
-    /* ボタンだけは目立つように、青い背景に白い文字にします */
+    /* ボタンは目立つように「青背景に白文字（ぶちなし）」にします */
     button, p[data-testid="stFormSubmitButton"] button {{
-        color: white !important;
+        color: #ffffff !important;
         background-color: #007bff !important;
         border-radius: 5px !important;
         text-shadow: none !important;
     }}
     
-    /* カレンダーの中の文字も黒にして見やすく固定 */
-    .fc * {{
-        text-shadow: none !important;
+    /* 【安全ガード】カレンダーが入っている折りたたみ（Expander）は、カレンダーが動画と混ざらないよう全体を白背景にする */
+    div[data-testid="stExpander"] {{
+        background-color: #ffffff !important;
+        border-radius: 10px !important;
+        padding: 15px !important;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.1) !important;
+    }}
+    
+    /* カレンダーと折りたたみの中の文字は、すべて通常の読みやすい黒文字（ぶちなし）に戻す */
+    div[data-testid="stExpander"] *, .fc * {{
         color: #111111 !important;
+        text-shadow: none !important;
     }}
     </style>
     <video autoplay loop muted playsinline id="bg-video">
@@ -115,7 +131,7 @@ if st.session_state.page == "input_datetime":
         value=today
     )
 
-    # --- 【大改善】一番シンプルで迷わない、通常の縦並びチェックボックス形式 ---
+    # --- シンプルで迷わない、通常の縦並びチェックボックス形式 ---
     st.write(f"### 🕒 {selected_date.strftime('%Y年%m月%d日')} の空き状況および時間帯選択")
     st.write("ご利用を希望される時間帯にチェックを入れてください（複数選択可）。")
     
