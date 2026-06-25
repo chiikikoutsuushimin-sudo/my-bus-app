@@ -17,17 +17,14 @@ def set_bg_video(video_file):
     
     video_html = f'''
     <style>
+    /* 右上のForkボタンやメニュー、足元の文字、バッジ等を完全に非表示にする */
     header {{ visibility: hidden; }}
     footer {{ visibility: hidden; }}
     div[data-testid="stDecoration"] {{ display: none; }}
     div[data-testid="stStatusWidget"] {{ display: none; }}
     [class^="viewerBadge"] {{ display: none !important; }}
     
-    .stApp {{ background: transparent; }}
-    #bg-video {{
-        position: fixed; right: 0; bottom: 0; min-width: 100%; min-height: 100%;
-        top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: -1; object-fit: cover;
-    }}
+    /* 背景動画とコンテンツのデザイン調整（重複をカットしました） */
     .stApp {{ background: transparent; }}
     #bg-video {{
         position: fixed; right: 0; bottom: 0; min-width: 100%; min-height: 100%;
@@ -62,7 +59,7 @@ except FileNotFoundError:
     st.warning("⚠️ 背景動画ファイル（background.mp4）が見つかりません。")
 
 
-# --- 【新機能】Googleスプレッドシートから予約データを読み込む関数 ---
+# --- Googleスプレッドシートから予約データを読み込む関数 ---
 def load_bookings_from_sheets():
     try:
         creds_dict = json.loads(st.secrets["gcp_json"])
@@ -76,7 +73,6 @@ def load_bookings_from_sheets():
         bookings = []
         for r in records:
             if not r["利用日"]: continue
-            # 文字列として保存されている日付や時間を、プログラムが理解できる型に変換
             d_parts = list(map(int, str(r["利用日"]).split("-")))
             b_date = datetime.date(d_parts[0], d_parts[1], d_parts[2])
             
@@ -100,7 +96,7 @@ def load_bookings_from_sheets():
         return []
 
 
-# --- 【新機能】Googleスプレッドシートに新しい予約を書き込む関数 ---
+# --- Googleスプレッドシートに新しい予約を書き込む関数 ---
 def add_booking_to_sheets(b):
     try:
         creds_dict = json.loads(st.secrets["gcp_json"])
@@ -148,7 +144,7 @@ if "page" not in st.session_state:
 if "temp_booking" not in st.session_state:
     st.session_state.temp_booking = {}
 
-# ─── 【重要】起動時にスプレッドシートからリアルタイムに全データを読み込む ───
+# 起動時・または手動更新ボタン押下時にスプレッドシートからデータを読み込む
 if "bookings" not in st.session_state or st.sidebar.button("🔄 データを最新に更新"):
     st.session_state.bookings = load_bookings_from_sheets()
 
@@ -268,70 +264,4 @@ if st.session_state.page == "input_datetime":
                 if is_closed: calendar_events_room2.append({"title": "⚪ 休館", "start": loop_date.strftime('%Y-%m-%d'), "allDay": True, "color": "#e0e0e0"})
                 else:
                     has_booking = any(b['date'] == loop_date and b['room'] == "地域交流室２（多目的スペース）" for b in st.session_state.bookings)
-                    calendar_events_room2.append({"title": "🔴 予約不可" if has_booking else "🟢 予約可能", "start": loop_date.strftime('%Y-%m-%d'), "allDay": True, "color": "#ff4b4b" if has_booking else "#2cd15a"})
-                loop_date += datetime.timedelta(days=1)
-            calendar(events=calendar_events_room2, options=calendar_options, key="calendar_room2")
-
-
-# ==========================================
-# 画面2：使用者情報の入力
-# ==========================================
-elif st.session_state.page == "input_personal_info":
-    st.subheader("使用者情報の入力")
-    temp = st.session_state.temp_booking
-    st.info(f"📋 選択中の日時: {temp['date'].strftime('%Y/%m/%d')} {temp['start_time'].strftime('%H:%M')}〜{temp['end_time'].strftime('%H:%M')} ({temp['room']})")
-
-    user_name = st.text_input("お名前 / 団体名（必須）")
-    user_email = st.text_input("メールアドレス（必須）")
-    user_address = st.text_input("ご住所（必須）")
-    user_phone = st.text_input("ご連絡先電話番号（必須）")
-    user_purpose = st.text_area("使用目的（必須）")
-    user_count = st.number_input("利用人数（人）", min_value=1, max_value=500, value=1)
-
-    col1, col2 = st.columns(2)
-    with col1:
-        if st.button("⬅️ 日時選択に戻る"):
-            st.session_state.page = "input_datetime"
-            st.rerun()
-            
-    with col2:
-        if st.button("予約を確定する ➡️"):
-            if not user_name or not user_email or not user_address or not user_phone or not user_purpose:
-                st.error("❌ エラー：必須項目をすべて入力してください。")
-            elif "@" not in user_email:
-                st.error("❌ エラー：正しいメールアドレスの形式で入力してください。")
-            else:
-                final_booking = st.session_state.temp_booking.copy()
-                final_booking.update({
-                    "name": user_name, "email": user_email, "address": user_address,
-                    "phone": user_phone, "purpose": user_purpose, "num_people": user_count
-                })
-                
-                # ─── 【重要】Googleスプレッドシートへの保存処理を実行 ───
-                with st.spinner("データをスプレッドシートに保存中..."):
-                    success = add_booking_to_sheets(final_booking)
-                
-                if success:
-                    mail_body = f"""庄原市交通交流施設 オンライン予約システムより自動送信\n\n以下の内容で施設の利用予約を受け付けました。\n\n【予約内容】\n■ お部屋: {final_booking['room']}\n■ 利用日: {final_booking['date'].strftime('%Y年%m月%d日')}\n■ 時間帯: {final_booking['start_time'].strftime('%H:%M')} ～ {final_booking['end_time'].strftime('%H:%M')} （{final_booking['hours']}時間）\n■ 概算料金: {final_booking['fee']:,} 円\n\n【申請者情報】\n■ お名前/団体名: {final_booking['name']}\n■ メールアドレス: {final_booking['email']}\n■ ご住所: {final_booking['address']}\n■ お電話番号: {final_booking['phone']}\n■ 使用目的: {final_booking['purpose']}\n■ 利用人数: {final_booking['num_people']} 名\n\n※内容の変更やキャンセルを希望される場合は、施設管理者まで直接ご連絡ください。"""
-                    
-                    send_email(user_email, "【施設予約】お申し込みを受け付けました", mail_body)
-                    send_email(st.secrets["admin_email"], "【新規通知】施設予約の申し込みがありました", mail_body)
-
-                    st.session_state.bookings.append(final_booking)
-                    st.session_state.page = "completed"
-                    st.rerun()
-
-
-# ==========================================
-# 画面3：予約完了画面
-# ==========================================
-elif st.session_state.page == "completed":
-    st.success("🎉 施設予約が確定し、Googleスプレッドシートにデータが安全に保管されました！")
-    last_b = st.session_state.bookings[-1]
-    st.write("### 🔑 受付内容の控え")
-    st.write(f"- **部屋名**: {last_b['room']}\n- **利用日時**: {last_b['date'].strftime('%Y/%m/%d')} {last_b['start_time'].strftime('%H:%M')}〜{last_b['end_time'].strftime('%H:%M')}\n- **申請者氏名**: {last_b['name']}\n- **通知先メール**: {last_b['email']}\n- **概算料金**: {last_b['fee']:,} 円")
-    
-    st.write("---")
-    if st.button("トップページ（新規予約）へ戻る"):
-        st.session_state.page = "input_datetime"
-        st.rerun()
+                    calendar_events_
