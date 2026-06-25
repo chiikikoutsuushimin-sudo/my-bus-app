@@ -164,7 +164,7 @@ st.title("庄原市交通交流施設オンライン予約")
 if st.session_state.page == "input_datetime":
     st.write("利用可能時間：9:00〜21:00（※12月29日〜1月3日は年末年始のため終日貸出不可）")
     
-    # ─── 📅 【確実版】別画面でカレンダーを開くボタン ───
+    # ─── 📅 別画面でカレンダーを開くボタン ───
     st.button(
         "📅 全体の予約状況（月間カレンダー）を別画面で確認する", 
         use_container_width=True, 
@@ -254,12 +254,11 @@ if st.session_state.page == "input_datetime":
 
 
 # ==========================================
-# 🗓️ 画面1.5：カレンダー専用独立ページ
+# 🗓️ 画面1.5：カレンダー専用独立ページ（修正箇所）
 # ==========================================
 elif st.session_state.page == "view_calendar":
     st.subheader("🗓️ 全体の予約状況（月間カレンダー）")
     
-    # ─── ⬅️ 【確実版】手続きに戻るボタン ───
     st.button(
         "⬅️ 予約手続きに戻る", 
         use_container_width=True, 
@@ -292,7 +291,8 @@ elif st.session_state.page == "view_calendar":
                 has_booking = any(b['date'] == loop_date and b['room'] == "地域交流室１（会議室）" for b in st.session_state.bookings)
                 calendar_events_room1.append({"title": "🔴 予約不可" if has_booking else "🟢 予約可能", "start": loop_date.strftime('%Y-%m-%d'), "allDay": True, "color": "#ff4b4b" if has_booking else "#2cd15a"})
             loop_date += datetime.timedelta(days=1)
-        calendar(events=calendar_events_room1, options=calendar_options, key="calendar_room1")
+        # 💡 key名を独立させてバグを回避
+        calendar(events=calendar_events_room1, options=calendar_options, key="view_calendar_room1")
 
     with tab2:
         calendar_events_room2 = []
@@ -304,7 +304,8 @@ elif st.session_state.page == "view_calendar":
                 has_booking = any(b['date'] == loop_date and b['room'] == "地域交流室２（多目的スペース）" for b in st.session_state.bookings)
                 calendar_events_room2.append({"title": "🔴 予約不可" if has_booking else "🟢 予約可能", "start": loop_date.strftime('%Y-%m-%d'), "allDay": True, "color": "#ff4b4b" if has_booking else "#2cd15a"})
             loop_date += datetime.timedelta(days=1)
-        calendar(events=calendar_events_room2, options=calendar_options, key="calendar_room2")
+        # 💡 key名を独立させてバグを回避
+        calendar(events=calendar_events_room2, options=calendar_options, key="view_calendar_room2")
 
 
 # ==========================================
@@ -330,41 +331,4 @@ elif st.session_state.page == "input_personal_info":
             
     with col2:
         if st.button("予約を確定する ➡️"):
-            if not user_name or not user_email or not user_address or not user_phone or not user_purpose:
-                st.error("❌ エラー：必須項目をすべて入力してください。")
-            elif "@" not in user_email:
-                st.error("❌ エラー：正しいメールアドレスの形式で入力してください。")
-            else:
-                final_booking = st.session_state.temp_booking.copy()
-                final_booking.update({
-                    "name": user_name, "email": user_email, "address": user_address,
-                    "phone": user_phone, "purpose": user_purpose, "num_people": user_count
-                })
-                
-                with st.spinner("データをスプレッドシートに保存中..."):
-                    success = add_booking_to_sheets(final_booking)
-                
-                if success:
-                    mail_body = f"""庄原市交通交流施設 オンライン予約システムより自動送信\n\n以下の内容で施設の利用予約を受け付けました。\n\n【予約内容】\n■ お部屋: {final_booking['room']}\n■ 利用日: {final_booking['date'].strftime('%Y年%m月%d日')}\n■ 時間帯: {final_booking['start_time'].strftime('%H:%M')} ～ {final_booking['end_time'].strftime('%H:%M')} （{final_booking['hours']}時間）\n■ 概算料金: {final_booking['fee']:,} 円\n\n【申請者情報】\n■ お名前/団体名: {final_booking['name']}\n■ メールアドレス: {final_booking['email']}\n■ ご住所: {final_booking['address']}\n■ お電話番号: {final_booking['phone']}\n■ 使用目的: {final_booking['purpose']}\n■ 利用人数: {final_booking['num_people']} 名\n\n※内容の変更やキャンセルを希望される場合は、施設管理者まで直接ご連絡ください。"""
-                    
-                    send_email(user_email, "【施設予約】お申し込みを受け付けました", mail_body)
-                    send_email(st.secrets["admin_email"], "【新規通知】施設予約の申し込みがありました", mail_body)
-
-                    st.session_state.bookings.append(final_booking)
-                    st.session_state.page = "completed"
-                    st.rerun()
-
-
-# ==========================================
-# 画面3：予約完了画面
-# ==========================================
-elif st.session_state.page == "completed":
-    st.success("🎉 施設予約が確定し、Googleスプレッドシートにデータが安全に保管されました！")
-    last_b = st.session_state.bookings[-1]
-    st.write("### 🔑 受付内容の控え")
-    st.write(f"- **部屋名**: {last_b['room']}\n- **利用日時**: {last_b['date'].strftime('%Y/%m/%d')} {last_b['start_time'].strftime('%H:%M')}〜{last_b['end_time'].strftime('%H:%M')}\n- **申請者氏名**: {last_b['name']}\n- **通知先メール**: {last_b['email']}\n- **概算料金**: {last_b['fee']:,} 円")
-    
-    st.write("---")
-    if st.button("トップページ（新規予約）へ戻る"):
-        st.session_state.page = "input_datetime"
-        st.rerun()
+            if not user_name or not user_email or not user_address or not user_phone or not user_purpose
