@@ -140,6 +140,11 @@ def send_email(to_email, subject, body):
         return False
 
 
+# --- 画面を安全に切り替えるためのコールバック関数 ---
+def change_page(page_name):
+    st.session_state.page = page_name
+
+
 # --- 状態の管理（セッション状態） ---
 if "page" not in st.session_state:
     st.session_state.page = "input_datetime"
@@ -159,10 +164,13 @@ st.title("庄原市交通交流施設オンライン予約")
 if st.session_state.page == "input_datetime":
     st.write("利用可能時間：9:00〜21:00（※12月29日〜1月3日は年末年始のため終日貸出不可）")
     
-    # ─── 📅 【新機能】別画面でカレンダーを開くボタン ───
-    if st.button("📅 全体の予約状況（月間カレンダー）を別画面で確認する", use_container_width=True):
-        st.session_state.page = "view_calendar"
-        st.rerun()
+    # ─── 📅 【確実版】別画面でカレンダーを開くボタン ───
+    st.button(
+        "📅 全体の予約状況（月間カレンダー）を別画面で確認する", 
+        use_container_width=True, 
+        on_click=change_page, 
+        args=("view_calendar",)
+    )
     st.write("---")
 
     st.subheader("申請日時と使用場所選択")
@@ -246,14 +254,18 @@ if st.session_state.page == "input_datetime":
 
 
 # ==========================================
-# 🗓️ 【新設】画面1.5：カレンダー専用独立ページ
+# 🗓️ 画面1.5：カレンダー専用独立ページ
 # ==========================================
 elif st.session_state.page == "view_calendar":
     st.subheader("🗓️ 全体の予約状況（月間カレンダー）")
     
-    if st.button("⬅️ 予約手続きに戻る", use_container_width=True):
-        st.session_state.page = "input_datetime"
-        st.rerun()
+    # ─── ⬅️ 【確実版】手続きに戻るボタン ───
+    st.button(
+        "⬅️ 予約手続きに戻る", 
+        use_container_width=True, 
+        on_click=change_page, 
+        args=("input_datetime",)
+    )
         
     st.write("---")
     
