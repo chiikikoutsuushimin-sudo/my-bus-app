@@ -1,6 +1,9 @@
 import streamlit as st
 import datetime
 import base64
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
 from streamlit_calendar import calendar
 
 # --- 背景に動画を設定する関数 ---
@@ -27,17 +30,14 @@ def set_bg_video(video_file):
         object-fit: cover;
     }}
     
-    /* === 【大絶賛のアイデア】文字の後ろ全体に「30%の薄い黒」を敷いて動画を透かす === */
     .main .block-container {{
-        /* rgbaの最後の「0.3」が30%の濃さを表します。もしもっと暗くしたければ0.5や0.6に変えられます */
         background-color: rgba(0, 0, 0, 0.3) !important; 
         padding: 2.5rem;
-        border-radius: 15px; /* 角を少し丸くしてスタイリッシュなアクリル板のようにします */
-        border: 1px solid rgba(255, 255, 255, 0.15) !important; /* 綺麗な薄い白の枠線 */
+        border-radius: 15px;
+        border: 1px solid rgba(255, 255, 255, 0.15) !important;
         box-shadow: 0 4px 30px rgba(0, 0, 0, 0.3);
     }}
     
-    /* 画面上のすべての文字を「白文字＋くっきり黒ぶち」で完全統一 */
     *, 
     .stApp, 
     .stMarkdown, .stSubheader, .stTitle, 
@@ -46,7 +46,7 @@ def set_bg_video(video_file):
     .fc *,
     div[role="listbox"] *,
     .stAlert * {{
-        color: #ffffff !important; /* すべて純白 */
+        color: #ffffff !important;
         text-shadow: 
             1px 1px 0px #000000,
             -1px -1px 0px #000000,
@@ -55,10 +55,9 @@ def set_bg_video(video_file):
             0px 1px 0px #000000,
             0px -1px 0px #000000,
             1px 0px 0px #000000,
-            -1px 0px 0px #000000 !important; /* 強力な黒ぶち */
+            -1px 0px 0px #000000 !important;
     }}
     
-    /* 入力フォームやカレンダー、ボタンの背景も雰囲気を合わせて少し暗い半透明にします */
     input, select, textarea, button,
     div[data-testid="stExpander"],
     .fc, .fc-theme-standard td, .fc-theme-standard th {{
@@ -75,7 +74,6 @@ def set_bg_video(video_file):
         background-color: rgba(255, 255, 255, 0.1) !important;
     }}
     
-    /* 部屋選択などのメニューが開いた時だけは、文字が重なって消えないようしっかりとした黒背景にします */
     div[data-baseweb="popover"], div[role="listbox"], ul[role="listbox"] {{
         background-color: rgba(15, 15, 15, 0.95) !important;
     }}
@@ -90,6 +88,31 @@ try:
     set_bg_video("background.mp4")
 except FileNotFoundError:
     st.warning("⚠️ 背景動画ファイル（background.mp4）が見つかりません。")
+
+
+# --- 【新機能】メールを自動送信する関数 ---
+def send_email(to_email, subject, body):
+    try:
+        # Streamlitの「隠し金庫（Secrets）」から安全にアカウント情報を読み込む
+        gmail_user = st.secrets["gmail_user"]
+        gmail_password = st.secrets["gmail_password"]
+        
+        # メールの設定
+        msg = MIMEMultipart()
+        msg['From'] = gmail_user
+        msg['To'] = to_email
+        msg['Subject'] = subject
+        msg.attach(MIMEText(body, 'plain', 'utf-8'))
+        
+        # Gmailのサーバー（SMTP）に接続して送信
+        server = smtplib.SMTP_SSL('smtp.gmail.com', 465)
+        server.login(gmail_user, gmail_password)
+        server.send_message(msg)
+        server.quit()
+        return True
+    except Exception as e:
+        st.error(f"⚠️ メール送信エラー: {e}")
+        return False
 
 
 # --- 状態の管理（セッション状態） ---
@@ -110,12 +133,8 @@ if st.session_state.page == "input_datetime":
     st.write("利用可能時間：9:00〜21:00（※12月29日〜1月3日は年末年始のため終日貸出不可）")
     st.subheader("申請日時と使用場所選択")
 
-    room = st.selectbox("部屋を選択してください", [
-        "地域交流室１（会議室）", 
-        "地域交流室２（多目的スペース）"
-    ])
+    room = st.selectbox("部屋を選択してください", ["地域交流室１（会議室）", "地域交流室２（多目的スペース）"])
 
-    # 日付のガードレール（過去や今年度末以降を選択不可にする）
     today = datetime.date.today()
     if today.month <= 3:
         fiscal_end_year = today.year
@@ -123,26 +142,17 @@ if st.session_state.page == "input_datetime":
         fiscal_end_year = today.year + 1
     max_date = datetime.date(fiscal_end_year, 3, 31)
 
-    selected_date = st.date_input(
-        "日付を選択してください", 
-        min_value=today, 
-        max_value=max_date, 
-        value=today
-    )
+    selected_date = st.date_input("日付を選択してください", min_value=today, max_value=max_date, value=today)
 
-    # --- シンプルで迷わない、通常の縦並びチェックボックス形式 ---
     st.write(f"### 🕒 {selected_date.strftime('%Y年%m月%d日')} の空き状況および時間帯選択")
-    st.write("ご利用を希望される時間帯にチェックを入れてください（複数選択可）。")
     
     is_closed_date = (selected_date.month == 12 and selected_date.day >= 29) or \
                      (selected_date.month == 1 and selected_date.day <= 3)
                      
     selected_slots = []
     
-    # 9:00〜21:00まで、1時間ごとに1つずつチェックボックスを並べる
     for h in range(9, 21):
         slot_text = f"{h}:00 〜 {h+1}:00"
-        
         if is_closed_date:
             status = "⚪ 休館日"
             is_disabled = True
@@ -160,7 +170,6 @@ if st.session_state.page == "input_datetime":
                 status = "🟢 予約可能"
                 is_disabled = False
         
-        # 予約できない時間帯は、最初からグレーアウト（disabled=True）にして触らせない安全設計
         if is_disabled:
             st.checkbox(f"{slot_text}  【 {status} 】", value=False, disabled=True, key=f"slot_{h}")
         else:
@@ -168,11 +177,9 @@ if st.session_state.page == "input_datetime":
                 selected_slots.append(h)
 
     st.write("---")
-
     usage_type = st.radio("利用区分", ["一般使用", "営利、宣伝等での使用"])
     use_ac = st.checkbox("冷暖房を使用する")
 
-    # --- チェック内容のリアルタイム検証と料金計算 ---
     hours = 0
     total_fee = 0
     start_time = None
@@ -181,7 +188,6 @@ if st.session_state.page == "input_datetime":
 
     if selected_slots:
         selected_slots.sort()
-        # 連続した時間帯が選ばれているかのチェック
         is_continuous = True
         for i in range(len(selected_slots) - 1):
             if selected_slots[i+1] - selected_slots[i] != 1:
@@ -198,7 +204,6 @@ if st.session_state.page == "input_datetime":
             end_time = datetime.time(end_h, 0)
             hours = len(selected_slots)
             
-            # 料金計算
             if usage_type == "営利、宣伝等での使用":
                 if room == "地域交流室１（会議室）":
                     total_fee += 1040 * hours
@@ -207,12 +212,10 @@ if st.session_state.page == "input_datetime":
                 if use_ac:
                     total_fee += 310 * hours
             
-            # 選択中の確定時間を明示
             st.info(f"📋 選択中の時間帯: {start_time.strftime('%H:%M')} 〜 {end_time.strftime('%H:%M')}")
     else:
         st.warning("⚠️ 上記の一覧より、ご利用になる時間帯にチェックを入れてください。")
 
-    # リアルタイム料金の提示
     st.markdown(f"### 💰 現在の概算料金: **{total_fee:,} 円** *(利用時間: {hours}時間)*")
 
     if st.button("次へ進む（連絡先等の入力へ）"):
@@ -223,7 +226,6 @@ if st.session_state.page == "input_datetime":
         elif is_closed_date:
             st.error("❌ エラー：年末年始の休館期間のため、予約手続きを進めることはできません。")
         else:
-            # すべてのガードレールを通過したら次画面へ
             st.session_state.temp_booking = {
                 "room": room,
                 "date": selected_date,
@@ -238,34 +240,20 @@ if st.session_state.page == "input_datetime":
             st.rerun()
 
     st.write("---")
-    
-    # 月間カレンダー（折りたたみ式）
     with st.expander("🗓️ 全体の予約状況（月間カレンダー）を見る"):
-        st.write("※緑表示の場合は予約可能、赤表示の場合は予約不可となります")
-        
         start_grid_date = selected_date.replace(day=1)
-        
         calendar_options = {
-            "editable": False,
-            "selectable": False,
-            "locale": "ja",
-            "headerToolbar": {
-                "left": "prev,next today",
-                "center": "title",
-                "right": "dayGridMonth"
-            },
+            "editable": False, "selectable": False, "locale": "ja",
+            "headerToolbar": {"left": "prev,next today", "center": "title", "right": "dayGridMonth"},
             "initialView": "dayGridMonth",
         }
-
         tab1, tab2 = st.tabs(["地域交流室１（会議室）の状況", "地域交流室２（多目的スペース）の状況"])
         
-        # --- タブ1: 地域交流室1 ---
         with tab1:
             calendar_events_room1 = []
             loop_date = start_grid_date
             while loop_date <= max_date:
-                is_closed = (loop_date.month == 12 and loop_date.day >= 29) or \
-                            (loop_date.month == 1 and loop_date.day <= 3)
+                is_closed = (loop_date.month == 12 and loop_date.day >= 29) or (loop_date.month == 1 and loop_date.day <= 3)
                 if is_closed:
                     calendar_events_room1.append({"title": "⚪ 休館", "start": loop_date.strftime('%Y-%m-%d'), "allDay": True, "color": "#e0e0e0"})
                 else:
@@ -279,16 +267,13 @@ if st.session_state.page == "input_datetime":
                     else:
                         calendar_events_room1.append({"title": "🟢 予約可能", "start": loop_date.strftime('%Y-%m-%d'), "allDay": True, "color": "#2cd15a"})
                 loop_date += datetime.timedelta(days=1)
-                
             calendar(events=calendar_events_room1, options=calendar_options, key="calendar_room1")
 
-        # --- タブ2: 地域交流室2 ---
         with tab2:
             calendar_events_room2 = []
             loop_date = start_grid_date
             while loop_date <= max_date:
-                is_closed = (loop_date.month == 12 and loop_date.day >= 29) or \
-                            (loop_date.month == 1 and loop_date.day <= 3)
+                is_closed = (loop_date.month == 12 and loop_date.day >= 29) or (loop_date.month == 1 and loop_date.day <= 3)
                 if is_closed:
                     calendar_events_room2.append({"title": "⚪ 休館", "start": loop_date.strftime('%Y-%m-%d'), "allDay": True, "color": "#e0e0e0"})
                 else:
@@ -302,12 +287,11 @@ if st.session_state.page == "input_datetime":
                     else:
                         calendar_events_room2.append({"title": "🟢 予約可能", "start": loop_date.strftime('%Y-%m-%d'), "allDay": True, "color": "#2cd15a"})
                 loop_date += datetime.timedelta(days=1)
-                
             calendar(events=calendar_events_room2, options=calendar_options, key="calendar_room2")
 
 
 # ==========================================
-# 画面2：使用者情報の入力
+# 画面2：使用者情報の入力（メールアドレス欄を追加）
 # ==========================================
 elif st.session_state.page == "input_personal_info":
     st.subheader("使用者情報の入力")
@@ -316,6 +300,7 @@ elif st.session_state.page == "input_personal_info":
     st.info(f"📋 選択中の日時: {temp['date'].strftime('%Y/%m/%d')} {temp['start_time'].strftime('%H:%M')}〜{temp['end_time'].strftime('%H:%M')} ({temp['room']})")
 
     user_name = st.text_input("お名前 / 団体名（必須）")
+    user_email = st.text_input("メールアドレス（必須：予約控えをお送りします）")  # 新設！
     user_address = st.text_input("ご住所（必須）")
     user_phone = st.text_input("ご連絡先電話番号（必須）")
     user_purpose = st.text_area("使用目的（必須）")
@@ -329,17 +314,45 @@ elif st.session_state.page == "input_personal_info":
             
     with col2:
         if st.button("予約を確定する ➡️"):
-            if not user_name or not user_address or not user_phone or not user_purpose:
-                st.error("❌ エラー：必須項目（お名前・ご住所・ご連絡先・使用目的）をすべて入力してください。")
+            if not user_name or not user_email or not user_address or not user_phone or not user_purpose:
+                st.error("❌ エラー：必須項目（お名前・メールアドレス・ご住所・ご連絡先・使用目的）をすべて入力してください。")
+            elif "@" not in user_email:
+                st.error("❌ エラー：正しいメールアドレスの形式で入力してください。")
             else:
+                # データの確定保存
                 final_booking = st.session_state.temp_booking.copy()
                 final_booking.update({
-                    "name": user_name,
-                    "address": user_address,
-                    "phone": user_phone,
-                    "purpose": user_purpose,
-                    "num_people": user_count
+                    "name": user_name, "email": user_email, "address": user_address,
+                    "phone": user_phone, "purpose": user_purpose, "num_people": user_count
                 })
+                
+                # --- メールの本文を作成 ---
+                mail_body = f"""庄原市交通交流施設 オンライン予約システムより自動送信
+
+以下の内容で施設の利用予約を受け付けました。
+
+【予約内容】
+■ お部屋: {final_booking['room']}
+■ 利用日: {final_booking['date'].strftime('%Y年%m月%d日')}
+■ 時間帯: {final_booking['start_time'].strftime('%H:%M')} ～ {final_booking['end_time'].strftime('%H:%M')} （{final_booking['hours']}時間）
+■ 概算料金: {final_booking['fee']:,} 円
+
+【申請者情報】
+■ お名前/団体名: {final_booking['name']}
+■ メールアドレス: {final_booking['email']}
+■ ご住所: {final_booking['address']}
+■ お電話番号: {final_booking['phone']}
+■ 使用目的: {final_booking['purpose']}
+■ 利用人数: {final_booking['num_people']} 名
+
+※内容の変更やキャンセルを希望される場合は、施設管理者まで直接ご連絡ください。
+"""
+                # --- メールの送信処理 ---
+                # 1. 申請者へ送信
+                send_email(user_email, "【施設予約】お申し込みを受け付けました", mail_body)
+                # 2. 管理者（あなた宛て）へ送信
+                send_email(st.secrets["gmail_user"], "【新規通知】施設予約の申し込みがありました", mail_body)
+
                 st.session_state.bookings.append(final_booking)
                 st.session_state.page = "completed"
                 st.rerun()
@@ -349,15 +362,15 @@ elif st.session_state.page == "input_personal_info":
 # 画面3：予約完了画面
 # ==========================================
 elif st.session_state.page == "completed":
-    st.success("🎉 施設予約が確定しました！お申し込みありがとうございます。")
+    st.success("🎉 施設予約が確定しました！入力されたメールアドレスへ控えをお送りしました。")
     
     last_b = st.session_state.bookings[-1]
     st.write("### 🔑 受付内容の控え")
     st.write(f"- **部屋名**: {last_b['room']}")
     st.write(f"- **利用日時**: {last_b['date'].strftime('%Y/%m/%d')} {last_b['start_time'].strftime('%H:%M')}〜{last_b['end_time'].strftime('%H:%M')}")
     st.write(f"- **申請者氏名**: {last_b['name']}")
-    st.write(f"- **利用人数**: {last_b['num_people']} 名")
-    st.write(f"- **概算料金**: {last_b['fee']} 円")
+    st.write(f"- **通知先メール**: {last_b['email']}")
+    st.write(f"- **概算料金**: {last_b['fee']:,} 円")
     
     st.write("---")
     if st.button("トップページ（新規予約）へ戻る"):
