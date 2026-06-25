@@ -17,14 +17,16 @@ def set_bg_video(video_file):
     
     video_html = f'''
     <style>
-    /* 右上のForkボタンやメニュー、足元の文字、バッジ等を完全に非表示にする */
-    header {{ visibility: hidden; }}
-    footer {{ visibility: hidden; }}
-    div[data-testid="stDecoration"] {{ display: none; }}
-    div[data-testid="stStatusWidget"] {{ display: none; }}
-    [class^="viewerBadge"] {{ display: none !important; }}
+    /* 🔴 【超最強版】すべての公式の飾り・文字・バッジ・メニューを強制的に消し去る */
+    header {{ visibility: hidden !important; opacity: 0 !important; pointer-events: none !important; }}
+    footer {{ visibility: hidden !important; opacity: 0 !important; pointer-events: none !important; }}
+    div[data-testid="stDecoration"] {{ display: none !important; }}
+    div[data-testid="stStatusWidget"] {{ display: none !important; }}
+    div[data-testid="stToolbar"] {{ display: none !important; }}
+    [class*="viewerBadge"] {{ display: none !important; }}
+    [class*="MainMenu"] {{ display: none !important; }}
     
-    /* 背景動画とコンテンツのデザイン調整（重複をカットしました） */
+    /* 背景動画とコンテンツのデザイン調整 */
     .stApp {{ background: transparent; }}
     #bg-video {{
         position: fixed; right: 0; bottom: 0; min-width: 100%; min-height: 100%;
