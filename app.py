@@ -17,6 +17,7 @@ def set_bg_video(video_file):
     
     video_html = f'''
     <style>
+    /* 右上のForkボタンやメニュー、足元の文字、バッジ等を完全に非表示にする（超最強版） */
     header {{ visibility: hidden !important; opacity: 0 !important; pointer-events: none !important; }}
     footer {{ visibility: hidden !important; opacity: 0 !important; pointer-events: none !important; }}
     div[data-testid="stDecoration"] {{ display: none !important; }}
@@ -24,6 +25,8 @@ def set_bg_video(video_file):
     div[data-testid="stToolbar"] {{ display: none !important; }}
     [class*="viewerBadge"] {{ display: none !important; }}
     [class*="MainMenu"] {{ display: none !important; }}
+    
+    /* 背景動画とコンテンツのデザイン調整 */
     .stApp {{ background: transparent; }}
     #bg-video {{
         position: fixed; right: 0; bottom: 0; min-width: 100%; min-height: 100%;
@@ -57,60 +60,311 @@ try:
 except FileNotFoundError:
     st.warning("⚠️ 背景動画ファイル（background.mp4）が見つかりません。")
 
-# --- 予約データ読み込み ---
+
+# --- Googleスプレッドシートから予約データを読み込む関数 ---
 def load_bookings_from_sheets():
     try:
         creds_dict = json.loads(st.secrets["gcp_json"])
         scopes = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
         creds = Credentials.from_service_account_info(creds_dict, scopes=scopes)
         client = gspread.authorize(creds)
+        
         sheet = client.open("施設予約データ").sheet1
         records = sheet.get_all_records()
+        
         bookings = []
         for r in records:
             if not r["利用日"]: continue
             d_parts = list(map(int, str(r["利用日"]).split("-")))
             b_date = datetime.date(d_parts[0], d_parts[1], d_parts[2])
+            
             st_parts = list(map(int, str(r["開始時間"]).split(":")))
+            start_time = datetime.time(st_parts[0], st_parts[1])
+            
             et_parts = list(map(int, str(r["終了時間"]).split(":")))
+            end_time = datetime.time(et_parts[0], et_parts[1])
+            
+            hours = et_parts[0] - st_parts[0]
+            
             bookings.append({
-                "room": r["部屋名"], "date": b_date, "start_time": datetime.time(st_parts[0], st_parts[1]),
-                "end_time": datetime.time(et_parts[0], et_parts[1])
+                "room": r["部屋名"], "date": b_date, "start_time": start_time, "end_time": end_time,
+                "fee": int(r["料金"]), "name": r["お名前"], "email": r["メールアドレス"],
+                "address": r["ご住所"], "phone": str(r["電話番号"]), "purpose": r["使用目的"],
+                "num_people": int(r["利用人数"]), "hours": hours
             })
         return bookings
-    except: return []
+    except Exception as e:
+        st.error(f"⚠️ スプレッドシート同期エラー: {e}")
+        return []
 
-# --- ページ遷移用 ---
-def change_page(page_name): st.session_state.page = page_name
 
-if "page" not in st.session_state: st.session_state.page = "input_datetime"
-if "bookings" not in st.session_state: st.session_state.bookings = load_bookings_from_sheets()
+# --- Googleスプレッドシートに新しい予約を書き込む関数 ---
+def add_booking_to_sheets(b):
+    try:
+        creds_dict = json.loads(st.secrets["gcp_json"])
+        scopes = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
+        creds = Credentials.from_service_account_info(creds_dict, scopes=scopes)
+        client = gspread.authorize(creds)
+        
+        sheet = client.open("施設予約データ").sheet1
+        
+        row = [
+            b["room"], b["date"].strftime("%Y-%m-%d"), b["start_time"].strftime("%H:%M"), b["end_time"].strftime("%H:%M"),
+            b["fee"], b["name"], b["email"], b["address"], b["phone"], b["purpose"], b["num_people"],
+            datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        ]
+        sheet.append_row(row)
+        return True
+    except Exception as e:
+        st.error(f"⚠️ スプレッドシート保存エラー: {e}")
+        return False
+
+
+# --- Gmail自動送信関数 ---
+def send_email(to_email, subject, body):
+    try:
+        gmail_user = st.secrets["gmail_user"]
+        gmail_password = st.secrets["gmail_password"]
+        msg = MIMEMultipart()
+        msg['From'] = gmail_user
+        msg['To'] = to_email
+        msg['Subject'] = subject
+        msg.attach(MIMEText(body, 'plain', 'utf-8'))
+        server = smtplib.SMTP_SSL('smtp.gmail.com', 464 + 1)
+        server.login(gmail_user, gmail_password)
+        server.send_message(msg)
+        server.quit()
+        return True
+    except Exception as e:
+        st.error(f"⚠️ メール送信エラー: {e}")
+        return False
+
+
+# --- 画面を安全に切り替えるためのコールバック関数 ---
+def change_page(page_name):
+    st.session_state.page = page_name
+
+
+# --- 状態の管理（セッション状態） ---
+if "page" not in st.session_state:
+    st.session_state.page = "input_datetime"
+if "temp_booking" not in st.session_state:
+    st.session_state.temp_booking = {}
+
+# 起動時・または手動更新ボタン押下時にスプレッドシートからデータを読み込む
+if "bookings" not in st.session_state or st.sidebar.button("🔄 データを最新に更新"):
+    st.session_state.bookings = load_bookings_from_sheets()
 
 st.title("庄原市交通交流施設オンライン予約")
 
+
 # ==========================================
-# ページ振り分け
+# 画面1：申請日時と使用場所選択
 # ==========================================
 if st.session_state.page == "input_datetime":
-    # (省略：入力画面のロジックはそのまま維持)
-    st.button("📅 全体の予約状況を別画面で確認する", use_container_width=True, on_click=change_page, args=("view_calendar",))
-    # ... (以下の入力処理は以前のコードと同様) ...
+    st.write("利用可能時間：9:00〜21:00（※12月29日〜1月3日は年末年始のため終日貸出不可）")
+    
+    # ─── 📅 別画面でカレンダーを開くボタン ───
+    st.button(
+        "📅 全体の予約状況（月間カレンダー）を別画面で確認する", 
+        use_container_width=True, 
+        on_click=change_page, 
+        args=("view_calendar",)
+    )
+    st.write("---")
 
+    st.subheader("申請日時と使用場所選択")
+
+    room = st.selectbox("部屋を選択してください", ["地域交流室１（会議室）", "地域交流室２（多目的スペース）"])
+
+    today = datetime.date.today()
+    if today.month <= 3: fiscal_end_year = today.year
+    else: fiscal_end_year = today.year + 1
+    max_date = datetime.date(fiscal_end_year, 3, 31)
+
+    selected_date = st.date_input("日付を選択してください", min_value=today, max_value=max_date, value=today)
+    st.write(f"### 🕒 {selected_date.strftime('%Y年%m月%d日')} の空き状況および時間帯選択")
+    
+    is_closed_date = (selected_date.month == 12 and selected_date.day >= 29) or (selected_date.month == 1 and selected_date.day <= 3)
+    selected_slots = []
+    
+    for h in range(9, 21):
+        slot_text = f"{h}:00 〜 {h+1}:00"
+        if is_closed_date:
+            status = "⚪ 休館日"
+            is_disabled = True
+        else:
+            booked = False
+            for b in st.session_state.bookings:
+                if b['date'] == selected_date and b['room'] == room:
+                    if not (datetime.time(h+1, 0) <= b['start_time'] or datetime.time(h, 0) >= b['end_time']):
+                        booked = True
+                        break
+            if booked:
+                status = "🔴 予約不可（先約あり）"
+                is_disabled = True
+            else:
+                status = "🟢 予約可能"
+                is_disabled = False
+        
+        if is_disabled: st.checkbox(f"{slot_text}  【 {status} 】", value=False, disabled=True, key=f"slot_{h}")
+        else:
+            if st.checkbox(f"{slot_text}  【 {status} 】", value=False, key=f"slot_{h}"): selected_slots.append(h)
+
+    st.write("---")
+    usage_type = st.radio("利用区分", ["一般使用", "営利、宣伝等での使用"])
+    use_ac = st.checkbox("冷暖房を使用する")
+
+    hours, total_fee, start_time, end_time, has_slot_error = 0, 0, None, None, False
+
+    if selected_slots:
+        selected_slots.sort()
+        is_continuous = True
+        for i in range(len(selected_slots) - 1):
+            if selected_slots[i+1] - selected_slots[i] != 1:
+                is_continuous = False
+                break
+        if not is_continuous:
+            st.error("❌ エラー：ご利用時間は、途切れることなく連続した時間帯で選択してください。")
+            has_slot_error = True
+        else:
+            start_time = datetime.time(selected_slots[0], 0)
+            end_time = datetime.time(selected_slots[-1] + 1, 0)
+            hours = len(selected_slots)
+            if usage_type == "営利、宣伝等での使用":
+                total_fee += (1040 if room == "地域交流室１（会議室）" else 520) * hours
+                if use_ac: total_fee += 310 * hours
+            st.info(f"📋 選択中の時間帯: {start_time.strftime('%H:%M')} 〜 {end_time.strftime('%H:%M')}")
+    else:
+        st.warning("⚠️ 上記の一覧より、ご利用になる時間帯にチェックを入れてください。")
+
+    st.markdown(f"### 💰 現在の概算料金: **{total_fee:,} 円** *(利用時間: {hours}時間)*")
+
+    if st.button("次へ進む（連絡先等の入力へ）"):
+        if not selected_slots: st.error("❌ エラー：時間帯が選択されていません。")
+        elif has_slot_error: st.error("❌ エラー：時間帯の選択内容に不備があります。")
+        elif is_closed_date: st.error("❌ エラー：年末年始の休館期間のため、予約手続きを進めることはできません。")
+        else:
+            st.session_state.temp_booking = {
+                "room": room, "date": selected_date, "start_time": start_time, "end_time": end_time,
+                "usage_type": usage_type, "use_ac": use_ac, "fee": total_fee, "hours": hours
+            }
+            st.session_state.page = "input_personal_info"
+            st.rerun()
+
+
+# ==========================================
+# 🗓️ 画面1.5：カレンダー専用独立ページ
+# ==========================================
 elif st.session_state.page == "view_calendar":
-    st.subheader("🗓️ 全体の予約状況")
-    if st.button("⬅️ 戻る", use_container_width=True, on_click=change_page, args=("input_datetime",)): st.rerun()
+    st.subheader("🗓️ 全体の予約状況（月間カレンダー）")
     
-    tab1, tab2 = st.tabs(["地域交流室１", "地域交流室２"])
+    st.button(
+        "⬅️ 予約手続きに戻る", 
+        use_container_width=True, 
+        on_click=change_page, 
+        args=("input_datetime",)
+    )
+        
+    st.write("---")
     
-    # 共通カレンダー設定
-    cal_options = {"locale": "ja", "headerToolbar": {"left": "prev,next today", "center": "title", "right": "dayGridMonth"}}
+    today = datetime.date.today()
+    if today.month <= 3: fiscal_end_year = today.year
+    else: fiscal_end_year = today.year + 1
+    max_date = datetime.date(fiscal_end_year, 3, 31)
+    
+    start_grid_date = today.replace(day=1)
+    calendar_options = {
+        "editable": False, "selectable": False, "locale": "ja",
+        "headerToolbar": {"left": "prev,next today", "center": "title", "right": "dayGridMonth"}, "initialView": "dayGridMonth",
+    }
+    
+    tab1, tab2 = st.tabs(["地域交流室１（会議室）の状況", "地域交流室２（多目的スペース）の状況"])
     
     with tab1:
-        events1 = [{"title": "🔴 予約済" if any(b['room'] == "地域交流室１（会議室）" and b['date'].strftime('%Y-%m-%d') == d.strftime('%Y-%m-%d') for b in st.session_state.bookings) else "🟢 空き", "start": d.strftime('%Y-%m-%d'), "allDay": True} for d in [datetime.date.today() + datetime.timedelta(days=i) for i in range(30)]]
-        calendar(events=events1, options=cal_options, key="C_ROOM_1")
-        
-    with tab2:
-        events2 = [{"title": "🔴 予約済" if any(b['room'] == "地域交流室２（多目的スペース）" and b['date'].strftime('%Y-%m-%d') == d.strftime('%Y-%m-%d') for b in st.session_state.bookings) else "🟢 空き", "start": d.strftime('%Y-%m-%d'), "allDay": True} for d in [datetime.date.today() + datetime.timedelta(days=i) for i in range(30)]]
-        calendar(events=events2, options=cal_options, key="C_ROOM_2")
+        calendar_events_room1 = []
+        loop_date = start_grid_date
+        while loop_date <= max_date:
+            is_closed = (loop_date.month == 12 and loop_date.day >= 29) or (loop_date.month == 1 and loop_date.day <= 3)
+            if is_closed: calendar_events_room1.append({"title": "⚪ 休館", "start": loop_date.strftime('%Y-%m-%d'), "allDay": True, "color": "#e0e0e0"})
+            else:
+                has_booking = any(b['date'] == loop_date and b['room'] == "地域交流室１（会議室）" for b in st.session_state.bookings)
+                calendar_events_room1.append({"title": "🔴 予約不可" if has_booking else "🟢 予約可能", "start": loop_date.strftime('%Y-%m-%d'), "allDay": True, "color": "#ff4b4b" if has_booking else "#2cd15a"})
+            loop_date += datetime.timedelta(days=1)
+        calendar(events=calendar_events_room1, options=calendar_options, key="view_calendar_room1")
 
-# (以降のinput_personal_infoやcompletedはそのまま維持)
+    with tab2:
+        calendar_events_room2 = []
+        loop_date = start_grid_date
+        while loop_date <= max_date:
+            is_closed = (loop_date.month == 12 and loop_date.day >= 29) or (loop_date.month == 1 and loop_date.day <= 3)
+            if is_closed: calendar_events_room2.append({"title": "⚪ 休館", "start": loop_date.strftime('%Y-%m-%d'), "allDay": True, "color": "#e0e0e0"})
+            else:
+                has_booking = any(b['date'] == loop_date and b['room'] == "地域交流室２（多目的スペース）" for b in st.session_state.bookings)
+                calendar_events_room2.append({"title": "🔴 予約不可" if has_booking else "🟢 予約可能", "start": loop_date.strftime('%Y-%m-%d'), "allDay": True, "color": "#ff4b4b" if has_booking else "#2cd15a"})
+            loop_date += datetime.timedelta(days=1)
+        calendar(events=calendar_events_room2, options=calendar_options, key="view_calendar_room2")
+
+
+# ==========================================
+# 画面2：使用者情報の入力
+# ==========================================
+elif st.session_state.page == "input_personal_info":
+    st.subheader("使用者情報の入力")
+    temp = st.session_state.temp_booking
+    st.info(f"📋 選択中の日時: {temp['date'].strftime('%Y/%m/%d')} {temp['start_time'].strftime('%H:%M')}〜{temp['end_time'].strftime('%H:%M')} ({temp['room']})")
+
+    user_name = st.text_input("お名前 / 団体名（必須）")
+    user_email = st.text_input("メールアドレス（必須）")
+    user_address = st.text_input("ご住所（必須）")
+    user_phone = st.text_input("ご連絡先電話番号（必須）")
+    user_purpose = st.text_area("使用目的（必須）")
+    user_count = st.number_input("利用人数（人）", min_value=1, max_value=500, value=1)
+
+    col1, col2 = st.columns(2)
+    with col1:
+        if st.button("⬅️ 日時選択に戻る"):
+            st.session_state.page = "input_datetime"
+            st.rerun()
+            
+    with col2:
+        if st.button("予約を確定する ➡️"):
+            # 💡 【修正点】末尾にコロン「:」をしっかりと追加しました
+            if not user_name or not user_email or not user_address or not user_phone or not user_purpose:
+                st.error("❌ エラー：必須項目をすべて入力してください。")
+            elif "@" not in user_email:
+                st.error("❌ エラー：正しいメールアドレスの形式で入力してください。")
+            else:
+                final_booking = st.session_state.temp_booking.copy()
+                final_booking.update({
+                    "name": user_name, "email": user_email, "address": user_address,
+                    "phone": user_phone, "purpose": user_purpose, "num_people": user_count
+                })
+                
+                with st.spinner("データをスプレッドシートに保存中..."):
+                    success = add_booking_to_sheets(final_booking)
+                
+                if success:
+                    mail_body = f"""庄原市交通交流施設 オンライン予約システムより自動送信\n\n以下の内容で施設の利用予約を受け付けました。\n\n【予約内容】\n■ お部屋: {final_booking['room']}\n■ 利用日: {final_booking['date'].strftime('%Y年%m月%d日')}\n■ 時間帯: {final_booking['start_time'].strftime('%H:%M')} ～ {final_booking['end_time'].strftime('%H:%M')} （{final_booking['hours']}時間）\n■ 概算料金: {final_booking['fee']:,} 円\n\n【申請者情報】\n■ お名前/団体名: {final_booking['name']}\n■ メールアドレス: {final_booking['email']}\n■ ご住所: {final_booking['address']}\n■ お電話番号: {final_booking['phone']}\n■ 使用目的: {final_booking['purpose']}\n■ 利用人数: {final_booking['num_people']} 名\n\n※内容の変更やキャンセルを希望される場合は、施設管理者まで直接ご連絡ください。"""
+                    
+                    send_email(user_email, "【施設予約】お申し込みを受け付けました", mail_body)
+                    send_email(st.secrets["admin_email"], "【新規通知】施設予約の申し込みがありました", mail_body)
+
+                    st.session_state.bookings.append(final_booking)
+                    st.session_state.page = "completed"
+                    st.rerun()
+
+
+# ==========================================
+# 画面3：予約完了画面
+# ==========================================
+elif st.session_state.page == "completed":
+    st.success("🎉 施設予約が確定し、Googleスプレッドシートにデータが安全に保管されました！")
+    last_b = st.session_state.bookings[-1]
+    st.write("### 🔑 受付内容の控え")
+    st.write(f"- **部屋名**: {last_b['room']}\n- **利用日時**: {last_b['date'].strftime('%Y/%m/%d')} {last_b['start_time'].strftime('%H:%M')}〜{last_b['end_time'].strftime('%H:%M')}\n- **申請者氏名**: {last_b['name']}\n- **通知先メール**: {last_b['email']}\n- **概算料金**: {last_b['fee']:,} 円")
+    
+    st.write("---")
+    if st.button("トップページ（新規予約）へ戻る"):
+        st.session_state.page = "input_datetime"
+        st.rerun()
