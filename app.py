@@ -19,6 +19,15 @@ def set_bg_video(video_file):
     <style>
     header {{ visibility: hidden; }}
     footer {{ visibility: hidden; }}
+    div[data-testid="stDecoration"] {{ display: none; }}
+    div[data-testid="stStatusWidget"] {{ display: none; }}
+    [class^="viewerBadge"] {{ display: none !important; }}
+    
+    .stApp {{ background: transparent; }}
+    #bg-video {{
+        position: fixed; right: 0; bottom: 0; min-width: 100%; min-height: 100%;
+        top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: -1; object-fit: cover;
+    }}
     .stApp {{ background: transparent; }}
     #bg-video {{
         position: fixed; right: 0; bottom: 0; min-width: 100%; min-height: 100%;
