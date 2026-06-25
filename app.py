@@ -84,11 +84,16 @@ def set_bg_video(video_file):
     '''
     st.markdown(video_html, unsafe_allow_html=True)
 
+# ─── 【復活！】背景動画を実際に呼び出す指示 ───
+try:
+    set_bg_video("background.mp4")
+except FileNotFoundError:
+    st.warning("⚠️ 背景動画ファイル（background.mp4）が見つかりません。")
+
 
 # --- 【Gmail専用】メール自動送信関数 ---
 def send_email(to_email, subject, body):
     try:
-        # 隠し金庫から情報を読み込み（送信元はGmail固定）
         gmail_user = st.secrets["gmail_user"]
         gmail_password = st.secrets["gmail_password"]
         
@@ -98,7 +103,6 @@ def send_email(to_email, subject, body):
         msg['Subject'] = subject
         msg.attach(MIMEText(body, 'plain', 'utf-8'))
         
-        # Gmailの安心・確実な設定で送信
         server = smtplib.SMTP_SSL('smtp.gmail.com', 465)
         server.login(gmail_user, gmail_password)
         server.send_message(msg)
