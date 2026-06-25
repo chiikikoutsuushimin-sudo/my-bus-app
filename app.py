@@ -45,10 +45,24 @@ def set_bg_video(video_file):
         text-shadow: none !important;
         color: black !important;
     }}
-    /* データエディタ内の文字や選択肢が他のスタイルに引っ張られないための保護 */
+    
+    /* === 【大改良】データエディタ内の文字保護と余計なUIの完全消去 === */
     div[data-testid="stDataEditor"] * {{
         color: black !important;
         text-shadow: none !important;
+    }}
+    /* 右上の余計なツールバー（検索・ダウンロード等）を完全に非表示 */
+    div[data-testid="stDataEditorToolbar"] {{
+        display: none !important;
+    }}
+    /* 列ヘッダーの並び替えボタンやメニューを無効化（触らせない） */
+    div[data-testid="stDataEditor"] th button {{
+        display: none !important;
+        pointer-events: none !important;
+    }}
+    /* ヘッダーの文字を中央揃えにし、ユーザーが列幅を変更するのを抑制 */
+    div[data-testid="stDataEditor"] th {{
+        pointer-events: none !important;
     }}
     </style>
     <video autoplay loop muted playsinline id="bg-video">
@@ -101,7 +115,7 @@ if st.session_state.page == "input_datetime":
         value=today
     )
 
-    # --- 【劇的改善】公式データエディタによる、完全な一体型時間割テーブル ---
+    # --- 公式データエディタによる、完全な一体型時間割テーブル ---
     st.write(f"### 🕒 {selected_date.strftime('%Y年%m月%d日')} の空き状況および時間帯選択")
     st.write("ご利用を希望される時間帯の「選択」欄にチェックを入れてください（複数選択可）。")
     
@@ -137,7 +151,7 @@ if st.session_state.page == "input_datetime":
     # 機械的なリストから美しい表（DataFrame）に変換
     df_timetable = pd.DataFrame(timetable_records)
 
-    # 公式のインタラクティブな表として画面に描画
+    # 公式のインタラクティブな表として画面に描画（余計な機能をCSSと引数で徹底ロック）
     edited_df = st.data_editor(
         df_timetable,
         column_config={
