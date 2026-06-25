@@ -27,10 +27,19 @@ def set_bg_video(video_file):
         object-fit: cover;
     }}
     
-    /* === 【究極の統一】例外なく、画面上の「すべての文字」を白文字＋くっきり黒ぶちにする === */
+    /* === 【大絶賛のアイデア】文字の後ろ全体に「30%の薄い黒」を敷いて動画を透かす === */
+    .main .block-container {{
+        /* rgbaの最後の「0.3」が30%の濃さを表します。もしもっと暗くしたければ0.5や0.6に変えられます */
+        background-color: rgba(0, 0, 0, 0.3) !important; 
+        padding: 2.5rem;
+        border-radius: 15px; /* 角を少し丸くしてスタイリッシュなアクリル板のようにします */
+        border: 1px solid rgba(255, 255, 255, 0.15) !important; /* 綺麗な薄い白の枠線 */
+        box-shadow: 0 4px 30px rgba(0, 0, 0, 0.3);
+    }}
+    
+    /* 画面上のすべての文字を「白文字＋くっきり黒ぶち」で完全統一 */
     *, 
     .stApp, 
-    .main .block-container, 
     .stMarkdown, .stSubheader, .stTitle, 
     input, select, textarea, button, 
     div[data-testid="stExpander"] *, 
@@ -38,7 +47,6 @@ def set_bg_video(video_file):
     div[role="listbox"] *,
     .stAlert * {{
         color: #ffffff !important; /* すべて純白 */
-        /* 全方向への強力な黒ぶち（縁取り） */
         text-shadow: 
             1px 1px 0px #000000,
             -1px -1px 0px #000000,
@@ -47,36 +55,29 @@ def set_bg_video(video_file):
             0px 1px 0px #000000,
             0px -1px 0px #000000,
             1px 0px 0px #000000,
-            -1px 0px 0px #000000,
-            2px 2px 4px rgba(0,0,0,0.9) !important;
+            -1px 0px 0px #000000 !important; /* 強力な黒ぶち */
     }}
     
-    /* === 背景の完全透明化と枠線の調整 === */
-    /* 中央ボックス、入力欄、ボタン、カレンダー、折りたたみの背景をすべて透明にし、動画の上に直接文字を乗せる */
-    .main .block-container, 
+    /* 入力フォームやカレンダー、ボタンの背景も雰囲気を合わせて少し暗い半透明にします */
     input, select, textarea, button,
     div[data-testid="stExpander"],
     .fc, .fc-theme-standard td, .fc-theme-standard th {{
-        background-color: transparent !important;
-        background: transparent !important;
-        border: 1px solid rgba(255, 255, 255, 0.4) !important; /* 枠線は薄い白にして上品に */
+        background-color: rgba(0, 0, 0, 0.25) !important;
+        border: 1px solid rgba(255, 255, 255, 0.3) !important;
     }}
     
-    /* 入力フォームをクリックしたときの枠線強調 */
     input:focus, select:focus, textarea:focus {{
         border: 1px solid #ffffff !important;
         outline: none !important;
     }}
     
-    /* ボタンのホバー（マウスを乗せたとき）の背景を少し見やすく */
     button:hover {{
         background-color: rgba(255, 255, 255, 0.1) !important;
     }}
     
-    /* 【視覚ガード】部屋選択などのドロップダウンメニューが開いた時、背景が透明すぎると重なって見えなくなるため、メニュー背景だけは暗い半透明にします */
+    /* 部屋選択などのメニューが開いた時だけは、文字が重なって消えないようしっかりとした黒背景にします */
     div[data-baseweb="popover"], div[role="listbox"], ul[role="listbox"] {{
         background-color: rgba(15, 15, 15, 0.95) !important;
-        border: 1px solid rgba(255, 255, 255, 0.3) !important;
     }}
     </style>
     <video autoplay loop muted playsinline id="bg-video">
