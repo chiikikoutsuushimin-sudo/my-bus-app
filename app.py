@@ -65,7 +65,6 @@ if "bookings" not in st.session_state:
 if "temp_booking" not in st.session_state:
     st.session_state.temp_booking = {}
 
-# 【変更】タイトルを「庄原市交通交流施設オンライン予約」に変更
 st.title("庄原市交通交流施設オンライン予約")
 
 
@@ -139,20 +138,25 @@ if st.session_state.page == "input_datetime":
             st.rerun()
 
     st.write("---")
-    # 【変更】タイトルを「現在の予約」に変更
     st.subheader("🗓️ 現在の予約")
-    # 【追加】「現在の予約」の下に注意事項を表示
     st.write("※緑表示の場合は予約可能、赤表示の場合は予約不可となります")
     
-    # --- 毎日・各部屋の「空きあり/空き無し」を自動計算してカレンダーに敷き詰める ---
+    # --- 【大改造】年度末（3月31日）まで自動でカレンダーを敷き詰める処理 ---
     calendar_events = []
     
     start_grid_date = selected_date.replace(day=1)
     rooms_list = ["地域交流室１（会議室）", "地域交流室２（多目的スペース）"]
     
-    for day_offset in range(60):
-        loop_date = start_grid_date + datetime.timedelta(days=day_offset)
-        
+    # 【新機能】選択された日付から、今年度の「3月31日」が何年になるかを自動計算
+    if selected_date.month <= 3:
+        end_year = selected_date.year
+    else:
+        end_year = selected_date.year + 1
+    target_end_date = datetime.date(end_year, 3, 31)
+    
+    # 選択月の1日から、今年度の3月31日まで1日ずつ順番にマークを作っていく
+    loop_date = start_grid_date
+    while loop_date <= target_end_date:
         is_closed = (loop_date.month == 12 and loop_date.day >= 29) or \
                     (loop_date.month == 1 and loop_date.day <= 3)
                     
@@ -187,6 +191,8 @@ if st.session_state.page == "input_datetime":
                         "allDay": True,
                         "color": "#2cd15a"
                     })
+        # 次の日へ進める
+        loop_date += datetime.timedelta(days=1)
     
     calendar_options = {
         "editable": False,
